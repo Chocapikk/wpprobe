@@ -101,6 +101,6 @@ func (l *Logger) PrintBanner(version string, isLatest bool) {
 
 	if !isLatest {
 		l.Warning("Your current WPProbe version is outdated. Latest version available.")
-		l.Warning("Update with: go install github.com/Chocapikk/wpprobe@latest")
+		l.Warning("Update with: wpprobe update")
 	}
 }

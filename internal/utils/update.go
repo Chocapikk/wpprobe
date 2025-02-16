@@ -20,16 +20,74 @@
 package utils
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
 	"github.com/fynelabs/selfupdate"
+	"github.com/goccy/go-json"
 )
 
-const updateURL = "https://github.com/Chocapikk/wpprobe/releases/latest/download/wpprobe-{{.OS}}-{{.Arch}}{{.Ext}}"
+const githubRepo = "Chocapikk/wpprobe"
+
+func GitHubLatestReleaseURL() string {
+	return fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
+}
+
+func GitHubDownloadURL(version, os, arch string) string {
+	return fmt.Sprintf(
+		"https://github.com/%s/releases/download/%s/wpprobe-%s-%s",
+		githubRepo,
+		version,
+		os,
+		arch,
+	)
+}
+
+func getLatestVersion() (string, error) {
+	logger.Info("Fetching latest WPProbe version...")
+
+	resp, err := http.Get(GitHubLatestReleaseURL())
+	if err != nil {
+		logger.Error("Failed to fetch latest release: " + err.Error())
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Error(fmt.Sprintf("GitHub API error: %d", resp.StatusCode))
+		return "", fmt.Errorf("GitHub API error: %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		logger.Error("Failed to parse JSON response: " + err.Error())
+		return "", err
+	}
+
+	version, ok := result["tag_name"].(string)
+	if !ok || version == "" {
+		logger.Error("Failed to extract latest version from GitHub API")
+		return "", fmt.Errorf("invalid version format")
+	}
+
+	logger.Success("Latest WPProbe version found: " + version)
+	return version, nil
+}
 
 func AutoUpdate() error {
-	logger.Info("Downloading WPProbe update...")
+	logger.Info("Checking for WPProbe updates...")
+
+	version, err := getLatestVersion()
+	if err != nil {
+		return err
+	}
+
+	osName := detectOS()
+	arch := detectArch()
+	updateURL := GitHubDownloadURL(version, osName, arch)
+
+	logger.Info("Downloading WPProbe update from: " + updateURL)
 
 	resp, err := http.Get(updateURL)
 	if err != nil {
@@ -38,10 +96,27 @@ func AutoUpdate() error {
 	}
 	defer resp.Body.Close()
 
-	err = selfupdate.Apply(resp.Body, selfupdate.Options{})
+	if resp.StatusCode != http.StatusOK {
+		logger.Error(fmt.Sprintf("Failed to download update, status: %d", resp.StatusCode))
+		return fmt.Errorf("failed to download update, status: %d", resp.StatusCode)
+	}
+
+	executable, err := os.Executable()
 	if err != nil {
+		logger.Error("Failed to determine executable path: " + err.Error())
+		return err
+	}
+
+	logger.Info("Replacing current binary: " + executable)
+
+	err = selfupdate.Apply(resp.Body, selfupdate.Options{
+		TargetPath: executable,
+	})
+	if err != nil {
+		logger.Error("Failed to update WPProbe: " + err.Error())
+
 		if rerr := selfupdate.RollbackError(err); rerr != nil {
-			logger.Error("Failed to rollback from bad update: " + rerr.Error())
+			logger.Error("Failed to rollback after failed update: " + rerr.Error())
 		} else {
 			logger.Warning("Update failed but rollback was successful.")
 		}
@@ -51,4 +126,24 @@ func AutoUpdate() error {
 	logger.Success("Update successful! Restart WPProbe to use the new version.")
 	os.Exit(0)
 	return nil
+}
+
+func detectOS() string {
+	switch os := os.Getenv("GOOS"); os {
+	case "windows":
+		return "windows"
+	case "darwin":
+		return "macos"
+	default:
+		return "linux"
+	}
+}
+
+func detectArch() string {
+	switch arch := os.Getenv("GOARCH"); arch {
+	case "arm64":
+		return "arm64"
+	default:
+		return "amd64"
+	}
 }

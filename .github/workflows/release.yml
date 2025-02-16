@@ -1,0 +1,67 @@
+name: Build & Release WPProbe
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🚀 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: stable
+
+      - name: 📦 Install dependencies
+        run: go mod tidy
+
+      - name: 🔨 Build WPProbe for multiple OS/Architectures
+        run: |
+          set -e
+          mkdir -p dist
+          echo "🏗️ Building Linux AMD64..."
+          GOOS=linux GOARCH=amd64 go build -o dist/wpprobe-linux-amd64
+          
+          echo "🏗️ Building Linux ARM64..."
+          GOOS=linux GOARCH=arm64 go build -o dist/wpprobe-linux-arm64
+          
+          echo "🏗️ Building Windows AMD64..."
+          GOOS=windows GOARCH=amd64 go build -o dist/wpprobe-windows-amd64.exe
+          
+          echo "🏗️ Building macOS AMD64..."
+          GOOS=darwin GOARCH=amd64 go build -o dist/wpprobe-macos-amd64
+          
+          echo "🏗️ Building macOS ARM64..."
+          GOOS=darwin GOARCH=arm64 go build -o dist/wpprobe-macos-arm64
+          
+          echo "✅ Build completed successfully!"
+
+      - name: 🛠️ Make binaries executable (Linux/macOS)
+        run: chmod +x dist/wpprobe-*
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "WPProbe ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          files: |
+            dist/wpprobe-linux-amd64
+            dist/wpprobe-linux-arm64
+            dist/wpprobe-windows-amd64.exe
+            dist/wpprobe-macos-amd64
+            dist/wpprobe-macos-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
