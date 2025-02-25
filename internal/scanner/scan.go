@@ -169,11 +169,12 @@ func ScanSite(
 			}
 
 			vulns := []wordfence.Vulnerability{}
-				for _, vuln := range vulnerabilityData {
-					if vuln.Slug == plugin && utils.IsVersionVulnerable(version, vuln.FromVersion, vuln.ToVersion) {
-						vulns = append(vulns, vuln)
-					}
+			for _, vuln := range vulnerabilityData {
+				if vuln.Slug == plugin &&
+					utils.IsVersionVulnerable(version, vuln.FromVersion, vuln.ToVersion) {
+					vulns = append(vulns, vuln)
 				}
+			}
 
 			if len(vulns) == 0 {
 				localResultsList = append(localResultsList, utils.PluginEntry{
