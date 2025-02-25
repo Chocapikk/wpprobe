@@ -115,7 +115,7 @@ func Test_saveVulnerabilitiesToFile(t *testing.T) {
 	os.Remove(outputPath)
 }
 
-func Test_loadVulnerabilities(t *testing.T) {
+func Test_LoadVulnerabilities(t *testing.T) {
 	vulnerabilities := []Vulnerability{
 		{
 			Title:        "Test Vulnerability Title",
@@ -140,7 +140,7 @@ func Test_loadVulnerabilities(t *testing.T) {
 		t.Fatalf("Failed to encode vulnerabilities: %v", err)
 	}
 
-	loadedVulns, err := loadVulnerabilities("wordfence_vulnerabilities.json")
+	loadedVulns, err := LoadVulnerabilities("wordfence_vulnerabilities.json")
 	if err != nil {
 		t.Fatalf("Failed to load vulnerabilities: %v", err)
 	}

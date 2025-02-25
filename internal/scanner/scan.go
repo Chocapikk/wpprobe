@@ -147,6 +147,13 @@ func ScanSite(
 	var mu sync.Mutex
 	sem := make(chan struct{}, opts.Threads)
 
+	vulnerabilityData, err := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
+	if err != nil {
+		logger.Warning("Failed to load Wordfence JSON: " + err.Error())
+		logger.Info("Run 'wpprobe update-db' to fetch the latest vulnerability database.")
+		logger.Warning("The scan will proceed, but vulnerabilities will not be displayed.")
+	}
+
 	for _, plugin := range pluginResult.Detected {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -154,13 +161,20 @@ func ScanSite(
 			defer wg.Done()
 			defer func() { <-sem }()
 			defer func() { _ = recover() }()
+
 			var localResultsList []utils.PluginEntry
 			version := "unknown"
 			if !opts.NoCheckVersion {
 				version = utils.GetPluginVersion(target, plugin, opts.Threads)
 			}
 
-			vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
+			vulns := []wordfence.Vulnerability{}
+				for _, vuln := range vulnerabilityData {
+					if vuln.Slug == plugin && utils.IsVersionVulnerable(version, vuln.FromVersion, vuln.ToVersion) {
+						vulns = append(vulns, vuln)
+					}
+				}
+
 			if len(vulns) == 0 {
 				localResultsList = append(localResultsList, utils.PluginEntry{
 					Plugin:   plugin,
@@ -189,6 +203,7 @@ func ScanSite(
 			mu.Unlock()
 		}(plugin)
 	}
+
 	wg.Wait()
 
 	if progress != nil {

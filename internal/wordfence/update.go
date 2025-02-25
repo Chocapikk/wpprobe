@@ -220,16 +220,14 @@ func saveVulnerabilitiesToFile(vulnerabilities []Vulnerability) error {
 	return nil
 }
 
-func loadVulnerabilities(filename string) ([]Vulnerability, error) {
+func LoadVulnerabilities(filename string) ([]Vulnerability, error) {
 	filePath, err := utils.GetStoragePath(filename)
 	if err != nil {
-		logger.Error("Error getting storage path: " + err.Error())
 		return nil, err
 	}
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		logger.Error("Failed to open Wordfence JSON: " + err.Error())
 		return nil, err
 	}
 	defer file.Close()
@@ -237,7 +235,6 @@ func loadVulnerabilities(filename string) ([]Vulnerability, error) {
 	var vulnerabilities []Vulnerability
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&vulnerabilities); err != nil {
-		logger.Error("JSON decoding error: " + err.Error())
 		return nil, err
 	}
 
@@ -247,7 +244,7 @@ func loadVulnerabilities(filename string) ([]Vulnerability, error) {
 func GetVulnerabilitiesForPlugin(plugin string, version string) []Vulnerability {
 	vulnerabilities := []Vulnerability{}
 
-	data, err := loadVulnerabilities("wordfence_vulnerabilities.json")
+	data, err := LoadVulnerabilities("wordfence_vulnerabilities.json")
 	if err != nil {
 		return vulnerabilities
 	}

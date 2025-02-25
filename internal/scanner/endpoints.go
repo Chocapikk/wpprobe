@@ -20,17 +20,14 @@
 package scanner
 
 import (
-	"time"
-
 	"encoding/json"
+	"time"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
 )
 
-func FetchEndpoints(target string) []string {
-	httpClient := utils.NewHTTPClient(10 * time.Second)
-
-	response, err := httpClient.Get(target + "/?rest_route=/")
+func fetchEndpointsFromPath(target, path string, httpClient *utils.HTTPClientManager) []string {
+	response, err := httpClient.Get(target + path)
 	if err != nil {
 		return []string{}
 	}
@@ -50,5 +47,17 @@ func FetchEndpoints(target string) []string {
 		endpoints = append(endpoints, route)
 	}
 
+	return endpoints
+}
+
+func FetchEndpoints(target string) []string {
+	httpClient := utils.NewHTTPClient(10 * time.Second)
+
+	endpoints := fetchEndpointsFromPath(target, "/?rest_route=/", httpClient)
+	if len(endpoints) > 0 {
+		return endpoints
+	}
+
+	endpoints = fetchEndpointsFromPath(target, "/wp-json", httpClient)
 	return endpoints
 }
