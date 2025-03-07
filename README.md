@@ -16,7 +16,7 @@
 
 Unlike traditional scanners that hammer websites with requests, WPProbe takes a smarter approach by querying the exposed REST API. This technique allows us to **identify plugins stealthily**, reducing detection risks and **speeding up the scan process**.  
 
-📌 **Currently, over 2200 plugins** can be identified using this method!  
+📌 **Currently, over 2900 plugins** can be identified using this method!  
 
 ---
 
@@ -216,7 +216,7 @@ http://localhost:5555,woocommerce,9.6.0,,,,,,,No vulnerabilities found
 
 💡 **The idea behind WPProbe** comes from the realization that **WordPress exposes plugin data through its REST API (`?rest_route`)**. Instead of wasting time brute-forcing plugin paths, this tool **matches REST endpoints with known plugin signatures**, allowing for faster and more stealthy scans.  
 
-**Over 2200 plugins** are currently detectable using this method, making WPProbe one of the most effective tools for WordPress reconnaissance.  
+**Over 2900 plugins** are currently detectable using this method, making WPProbe one of the most effective tools for WordPress reconnaissance.  
 
 ---
 

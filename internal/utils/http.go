@@ -29,7 +29,7 @@ import (
 	"github.com/corpix/uarand"
 )
 
-const maxResponseSizeMB = 20
+const maxResponseSizeMB = 50
 
 var maxResponseSize = maxResponseSizeMB * 1024 * 1024
 
