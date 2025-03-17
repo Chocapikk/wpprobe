@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -39,22 +40,18 @@ func TestLoadPluginEndpointsFromData(t *testing.T) {
 				"plugin1": {"/endpoint1", "/endpoint2"},
 				"plugin2": {"/endpoint3"},
 			},
-			wantErr: false,
 		},
 		{
-			name:    "Invalid JSON data",
-			data:    []byte(`{"plugin1": ["/endpoint1", "/endpoint2",]}`),
-			want:    map[string][]string{},
-			wantErr: false,
+			name: "Invalid JSON data",
+			data: []byte(`{"plugin1": ["/endpoint1", "/endpoint2",]}`),
+			want: map[string][]string{},
 		},
 		{
-			name:    "Empty data",
-			data:    []byte(``),
-			want:    map[string][]string{},
-			wantErr: false,
+			name: "Empty data",
+			data: []byte(``),
+			want: map[string][]string{},
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := LoadPluginEndpointsFromData(tt.data)
@@ -69,12 +66,48 @@ func TestLoadPluginEndpointsFromData(t *testing.T) {
 	}
 }
 
-func sortDetectionResult(result *PluginDetectionResult) {
-	sort.Strings(result.Detected)
+type compareDetection struct {
+	Plugins  map[string]PluginData
+	Detected []string
+}
 
-	for _, matches := range result.Matches {
-		sort.Strings(matches)
+func toCompare(d PluginDetectionResult) compareDetection {
+	res := compareDetection{
+		Plugins:  make(map[string]PluginData),
+		Detected: append([]string(nil), d.Detected...),
 	}
+	sort.Strings(res.Detected)
+	for k, v := range d.Plugins {
+		if v != nil {
+			tmp := *v
+			sort.Strings(tmp.Matches)
+			res.Plugins[k] = tmp
+		}
+	}
+	return res
+}
+
+func compareDetections(a, b compareDetection) bool {
+	if !reflect.DeepEqual(a.Detected, b.Detected) {
+		return false
+	}
+	if len(a.Plugins) != len(b.Plugins) {
+		return false
+	}
+	for k, va := range a.Plugins {
+		vb, ok := b.Plugins[k]
+		if !ok {
+			return false
+		}
+		if va.Score != vb.Score || va.Ambiguous != vb.Ambiguous ||
+			!reflect.DeepEqual(va.Matches, vb.Matches) {
+			return false
+		}
+		if fmt.Sprintf("%.2f", va.Confidence) != fmt.Sprintf("%.2f", vb.Confidence) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestDetectPlugins(t *testing.T) {
@@ -93,11 +126,15 @@ func TestDetectPlugins(t *testing.T) {
 				"plugin1": {"/endpoint1", "/endpoint2", "/endpoint3"},
 			},
 			want: PluginDetectionResult{
-				Scores:     map[string]int{"plugin1": 2},
-				Confidence: map[string]float64{"plugin1": 66.66666666666666},
-				Ambiguity:  map[string]bool{},
-				Detected:   []string{"plugin1"},
-				Matches:    map[string][]string{"plugin1": {"plugin1"}},
+				Plugins: map[string]*PluginData{
+					"plugin1": {
+						Score:      2,
+						Confidence: 66.67,
+						Ambiguous:  false,
+						Matches:    []string{},
+					},
+				},
+				Detected: []string{"plugin1"},
 			},
 		},
 		{
@@ -110,14 +147,21 @@ func TestDetectPlugins(t *testing.T) {
 				"plugin2": {"/shared-endpoint"},
 			},
 			want: PluginDetectionResult{
-				Scores:     map[string]int{"plugin1": 1, "plugin2": 1},
-				Confidence: map[string]float64{"plugin1": 100.0, "plugin2": 100.0},
-				Ambiguity:  map[string]bool{"plugin1": true, "plugin2": true},
-				Detected:   []string{"plugin1", "plugin2"},
-				Matches: map[string][]string{
-					"plugin1": {"plugin1", "plugin2"},
-					"plugin2": {"plugin1", "plugin2"},
+				Plugins: map[string]*PluginData{
+					"plugin1": {
+						Score:      1,
+						Confidence: 100.00,
+						Ambiguous:  true,
+						Matches:    []string{"plugin1", "plugin2"},
+					},
+					"plugin2": {
+						Score:      1,
+						Confidence: 100.00,
+						Ambiguous:  true,
+						Matches:    []string{"plugin1", "plugin2"},
+					},
 				},
+				Detected: []string{"plugin1", "plugin2"},
 			},
 		},
 		{
@@ -127,24 +171,18 @@ func TestDetectPlugins(t *testing.T) {
 				"plugin1": {"/endpoint1", "/endpoint2"},
 			},
 			want: PluginDetectionResult{
-				Scores:     map[string]int{},
-				Confidence: map[string]float64{},
-				Ambiguity:  map[string]bool{},
-				Detected:   []string{},
-				Matches:    map[string][]string{},
+				Plugins:  map[string]*PluginData{},
+				Detected: []string{},
 			},
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := DetectPlugins(tt.detectedEndpoints, tt.pluginEndpoints)
-
-			sortDetectionResult(&got)
-			sortDetectionResult(&tt.want)
-
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("DetectPlugins() = %#v, want %#v", got, tt.want)
+			gotVal := toCompare(got)
+			wantVal := toCompare(tt.want)
+			if !compareDetections(gotVal, wantVal) {
+				t.Errorf("DetectPlugins() = %+v, want %+v", gotVal, wantVal)
 			}
 		})
 	}

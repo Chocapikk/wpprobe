@@ -133,6 +133,7 @@ func TestJSONWriter_WriteResults(t *testing.T) {
 
 	results := []PluginEntry{
 		{Plugin: "test-plugin", Version: "1.0", Severity: "High", CVEs: []string{"CVE-1234"}},
+		{Plugin: "no-vuln-plugin", Version: "unknown", Severity: "N/A", CVEs: nil, CVELinks: nil},
 	}
 
 	writer.WriteResults("http://example.com", results)
@@ -158,6 +159,10 @@ func TestJSONWriter_WriteResults(t *testing.T) {
 	plugins := data["plugins"].(map[string]interface{})
 	if _, exists := plugins["test-plugin"]; !exists {
 		t.Errorf("Expected 'test-plugin' in plugins, got %v", plugins)
+	}
+
+	if _, exists := plugins["no-vuln-plugin"]; !exists {
+		t.Errorf("Expected 'no-vuln-plugin' in plugins, but it was missing")
 	}
 }
 
@@ -204,21 +209,6 @@ func TestDetectOutputFormat(t *testing.T) {
 				t.Logf("Correct format detected: %s", got)
 			}
 		})
-	}
-}
-
-func TestFormatVulnerabilities(t *testing.T) {
-	vulnMap := map[string][]string{
-		"Critical": {"CVE-2023-0001", "CVE-2023-0002"},
-		"High":     {"CVE-2023-0003"},
-	}
-
-	got := FormatVulnerabilities(vulnMap)
-	t.Logf("Formatted vulnerabilities: %s", got)
-
-	if !strings.Contains(got, "Critical: CVE-2023-0001, CVE-2023-0002") ||
-		!strings.Contains(got, "High: CVE-2023-0003") {
-		t.Errorf("FormatVulnerabilities() got = %v", got)
 	}
 }
 

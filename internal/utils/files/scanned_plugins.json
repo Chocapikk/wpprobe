@@ -1765,9 +1765,9 @@
 {"offload-media-cloud-storage":["/acoofm/v1","/acoofm/v1/commonSettings","/acoofm/v1/updateCommonSettings","/acoofm/v1/serviceConnect","/acoofm/v1/serviceSave","/acoofm/v1/settingsSave","/acoofm/v1/settingsReset","/acoofm/v1/uploadCredentials"]}
 {"olalaweb-mailchimp-campaign-manager":["/wp/v2/newsletter","/wp/v2/newsletter/(?P<id>[\\\\d]+)","/wp/v2/newsletter/(?P<id>[\\\\d]+)/autosaves","/wp/v2/newsletter/(?P<parent>[\\\\d]+)/autosaves/(?P<id>[\\\\d]+)"]}
 {"ols-2fa":["/ols-2fa/v1","/ols-2fa/v1/settings","/ols-2fa/v1/send-auth-code-email","/ols-2fa/v1/verify-auth-code"]}
-{"omnicommerce-connector-for-woocommerce":["/wc/v3","/wc/v3/omc-skus"]}
-{"omnicommerce-integracion-para-dragonfish":["/wc/v3","/wc/v3/omc-skus"]}
-{"omnicommerce-integracion-para-lince-indumentaria":["/wc/v3","/wc/v3/omc-skus"]}
+{"omnicommerce-connector-for-woocommerce":["/wc/v3/omc-skus"]}
+{"omnicommerce-integracion-para-dragonfish":["/wc/v3/omc-skus"]}
+{"omnicommerce-integracion-para-lince-indumentaria":["/wc/v3/omc-skus"]}
 {"omni-contact-form":["/omni/v1","/omni/v1/post"]}
 {"omniform":["/omniform/v1","/omniform/v1/forms","/omniform/v1/forms/(?P<id>[\\\\d]+)","/omniform/v1/forms/(?P<id>[\\\\d]+)/responses","/omniform/v1/forms/(?P<parent>[\\\\d]+)/revisions","/omniform/v1/forms/(?P<parent>[\\\\d]+)/revisions/(?P<id>[\\\\d]+)","/omniform/v1/forms/(?P<id>[\\\\d]+)/autosaves","/omniform/v1/forms/(?P<parent>[\\\\d]+)/autosaves/(?P<id>[\\\\d]+)"]}
 {"omnisend-connect":["/omnisend-api/v1","/omnisend-api/v1/connect","/omnisend-api/v1/disconnect","/omnisend-api/v1/connected","/omnisend-api/v1/status","/omnisend-api/v1/omnisend-settings"]}

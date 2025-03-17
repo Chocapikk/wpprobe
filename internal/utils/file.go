@@ -53,8 +53,7 @@ type PluginEntry struct {
 }
 
 func authTypeOrder(auth string) int {
-	a := strings.ToLower(auth)
-	switch a {
+	switch strings.ToLower(auth) {
 	case "unauth":
 		return 0
 	case "auth":
@@ -79,7 +78,6 @@ func NewCSVWriter(filename string) *CSVWriter {
 	if err != nil {
 		DefaultLogger.Error("Failed to open CSV file: " + err.Error())
 	}
-
 	writer := csv.NewWriter(file)
 	header := []string{
 		"URL",
@@ -95,18 +93,27 @@ func NewCSVWriter(filename string) *CSVWriter {
 	}
 	_ = writer.Write(header)
 	writer.Flush()
-
-	return &CSVWriter{
-		file:   file,
-		writer: writer,
-	}
+	return &CSVWriter{file: file, writer: writer}
 }
 
 func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	severityOrder := map[string]int{
+		"critical": 1,
+		"high":     2,
+		"medium":   3,
+		"low":      4,
+		"unknown":  5,
+		"N/A":      6,
+	}
+
 	sort.Slice(results, func(i, j int) bool {
+		si, sj := severityOrder[results[i].Severity], severityOrder[results[j].Severity]
+		if si != sj {
+			return si < sj
+		}
 		return authTypeOrder(results[i].AuthType) < authTypeOrder(results[j].AuthType)
 	})
 
@@ -139,11 +146,60 @@ func (c *CSVWriter) Close() {
 // JSON Writer Implementation
 //////////////////////////////
 
+type Vulnerability struct {
+	CVE        string  `json:"cve"`
+	CVELink    string  `json:"cve_link"`
+	Title      string  `json:"title"`
+	CVSSScore  float64 `json:"cvss_score"`
+	CVSSVector string  `json:"cvss_vector"`
+}
+
+type AuthGroup struct {
+	AuthType        string          `json:"auth_type"`
+	Vulnerabilities []Vulnerability `json:"vulnerabilities"`
+}
+
+type SeverityEntry struct {
+	Severity string
+	Auths    []AuthGroup
+}
+
+func (s SeverityEntry) MarshalJSON() ([]byte, error) {
+	m := map[string][]AuthGroup{
+		strings.ToLower(s.Severity): s.Auths,
+	}
+	return json.Marshal(m)
+}
+
+type VersionGroup struct {
+	Version    string          `json:"version"`
+	Severities []SeverityEntry `json:"severities"`
+}
+
+type PluginResult struct {
+	Name     string         `json:"-"`
+	Versions []VersionGroup `json:"versions"`
+}
+
+type PluginsCollection []PluginResult
+
+func (p PluginsCollection) MarshalJSON() ([]byte, error) {
+	m := make(map[string][]VersionGroup)
+	for _, pr := range p {
+		m[pr.Name] = pr.Versions
+	}
+	return json.Marshal(m)
+}
+
+type OutputResults struct {
+	URL     string            `json:"url"`
+	Plugins PluginsCollection `json:"plugins"`
+}
+
 type JSONWriter struct {
-	file    *os.File
-	encoder *json.Encoder
-	mu      sync.Mutex
-	first   bool
+	file  *os.File
+	mu    sync.Mutex
+	first bool
 }
 
 func NewJSONWriter(output string) *JSONWriter {
@@ -152,125 +208,139 @@ func NewJSONWriter(output string) *JSONWriter {
 		DefaultLogger.Error("Failed to open JSON file: " + err.Error())
 		os.Exit(1)
 	}
-
-	return &JSONWriter{file: file, encoder: json.NewEncoder(file)}
+	return &JSONWriter{file: file}
 }
 
 func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
-	groupedResults := make(map[string]map[string]map[string]map[string][]map[string]interface{})
+	pluginResultsMap := make(map[string]*PluginResult)
+	detectedPlugins := make(map[string]bool)
 
 	for _, entry := range results {
-		plugin := entry.Plugin
+		pluginName := entry.Plugin
 		version := entry.Version
 		severity := entry.Severity
 		auth := strings.ToLower(entry.AuthType)
 
+		detectedPlugins[pluginName] = true
+
+		if severity == "" || severity == "N/A" {
+			continue
+		}
+
 		if auth != "auth" && auth != "unauth" && auth != "privileged" {
 			auth = "unknown"
 		}
+		authFormatted := cases.Title(language.Und).String(auth)
 
-		if _, ok := groupedResults[plugin]; !ok {
-			groupedResults[plugin] = make(map[string]map[string]map[string][]map[string]interface{})
+		vuln := Vulnerability{
+			CVE:        "",
+			CVELink:    "",
+			Title:      entry.Title,
+			CVSSScore:  entry.CVSSScore,
+			CVSSVector: entry.CVSSVector,
 		}
-		if _, ok := groupedResults[plugin][version]; !ok {
-			groupedResults[plugin][version] = make(map[string]map[string][]map[string]interface{})
+
+		if len(entry.CVEs) > 0 {
+			vuln.CVE = entry.CVEs[0]
 		}
-		if severity != "" && severity != "N/A" {
-			if _, ok := groupedResults[plugin][version][severity]; !ok {
-				groupedResults[plugin][version][severity] = make(
-					map[string][]map[string]interface{},
-				)
+		if len(entry.CVELinks) > 0 {
+			vuln.CVELink = entry.CVELinks[0]
+		}
+
+		pr, ok := pluginResultsMap[pluginName]
+		if !ok {
+			pr = &PluginResult{Name: pluginName, Versions: []VersionGroup{}}
+			pluginResultsMap[pluginName] = pr
+		}
+
+		var vg *VersionGroup
+		for i := range pr.Versions {
+			if pr.Versions[i].Version == version {
+				vg = &pr.Versions[i]
+				break
 			}
+		}
+		if vg == nil {
+			pr.Versions = append(pr.Versions, VersionGroup{
+				Version:    version,
+				Severities: []SeverityEntry{},
+			})
+			vg = &pr.Versions[len(pr.Versions)-1]
+		}
 
-			for i, cve := range entry.CVEs {
-				cveLink := ""
-				if i < len(entry.CVELinks) {
-					cveLink = entry.CVELinks[i]
-				}
+		var se *SeverityEntry
+		for i := range vg.Severities {
+			if vg.Severities[i].Severity == severity {
+				se = &vg.Severities[i]
+				break
+			}
+		}
+		if se == nil {
+			vg.Severities = append(vg.Severities, SeverityEntry{
+				Severity: severity,
+				Auths:    []AuthGroup{},
+			})
+			se = &vg.Severities[len(vg.Severities)-1]
+		}
 
-				groupedResults[plugin][version][severity][auth] = append(
-					groupedResults[plugin][version][severity][auth],
-					map[string]interface{}{
-						"cve":         cve,
-						"cve_link":    cveLink,
-						"title":       entry.Title,
-						"cvss_score":  entry.CVSSScore,
-						"cvss_vector": entry.CVSSVector,
+		se.Auths = append(se.Auths, AuthGroup{
+			AuthType:        authFormatted,
+			Vulnerabilities: []Vulnerability{vuln},
+		})
+
+		sort.Slice(vg.Severities, func(i, j int) bool {
+			severityOrder := map[string]int{
+				"critical": 1,
+				"high":     2,
+				"medium":   3,
+				"low":      4,
+				"unknown":  5,
+				"N/A":      6,
+			}
+			return severityOrder[strings.ToLower(vg.Severities[i].Severity)] <
+				severityOrder[strings.ToLower(vg.Severities[j].Severity)]
+		})
+	}
+
+	for pluginName := range detectedPlugins {
+		if _, exists := pluginResultsMap[pluginName]; !exists {
+			pluginResultsMap[pluginName] = &PluginResult{
+				Name: pluginName,
+				Versions: []VersionGroup{
+					{
+						Version:    "unknown",
+						Severities: []SeverityEntry{},
 					},
-				)
+				},
 			}
 		}
 	}
 
-	pluginsFormatted := make(map[string][]map[string]interface{})
-	desiredAuthOrder := []string{"unauth", "auth", "privileged", "unknown"}
-
-	for plugin, versions := range groupedResults {
-		for version, severities := range versions {
-			formattedSeverities := make(map[string]interface{})
-			hasVulnerabilities := false
-
-			for severity, authMap := range severities {
-				ordered := make([]map[string]interface{}, 0)
-				for _, a := range desiredAuthOrder {
-					if vulns, ok := authMap[a]; ok && len(vulns) > 0 {
-						ordered = append(ordered, map[string]interface{}{
-							"auth_type":       cases.Title(language.Und).String(a),
-							"vulnerabilities": vulns,
-						})
-					}
-				}
-				if len(ordered) > 0 {
-					formattedSeverities[severity] = ordered
-					hasVulnerabilities = true
-				}
-			}
-
-			entry := map[string]interface{}{"version": version}
-			if hasVulnerabilities {
-				entry["severities"] = formattedSeverities
-			}
-
-			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], entry)
-		}
+	var pluginsColl PluginsCollection
+	for _, pr := range pluginResultsMap {
+		pluginsColl = append(pluginsColl, *pr)
 	}
 
-	detectedPlugins := make(map[string]bool)
-	for _, entry := range results {
-		detectedPlugins[entry.Plugin] = true
-	}
-
-	for _, entry := range results {
-		if _, exists := pluginsFormatted[entry.Plugin]; !exists {
-			pluginsFormatted[entry.Plugin] = []map[string]interface{}{
-				{"version": entry.Version},
-			}
-		}
-	}
-
-	outputEntry := map[string]interface{}{
-		"url":     url,
-		"plugins": pluginsFormatted,
+	outputEntry := OutputResults{
+		URL:     url,
+		Plugins: pluginsColl,
 	}
 
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
-	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(outputEntry)
 
 	data := buffer.Bytes()
 	if len(data) > 0 {
 		data = data[:len(data)-1]
 	}
-
 	if !j.first {
 		_, _ = j.file.WriteString("\n")
 	}
 	j.first = false
-
 	_, _ = j.file.Write(data)
 }
 
@@ -300,26 +370,15 @@ func DetectOutputFormat(outputFile string) string {
 }
 
 func GetWriter(outputFile string) WriterInterface {
-	format := DetectOutputFormat(outputFile)
-	switch format {
-	case "json":
+	if strings.HasSuffix(outputFile, ".json") {
 		return NewJSONWriter(outputFile)
-	default:
-		return NewCSVWriter(outputFile)
 	}
+	return NewCSVWriter(outputFile)
 }
 
 //////////////////////////////
 // Utils
 //////////////////////////////
-
-func FormatVulnerabilities(vulnMap map[string][]string) string {
-	var sections []string
-	for severity, cves := range vulnMap {
-		sections = append(sections, fmt.Sprintf("%s: %s", severity, strings.Join(cves, ", ")))
-	}
-	return strings.Join(sections, " | ")
-}
 
 func ReadLines(filename string) ([]string, error) {
 	file, err := os.Open(filename)

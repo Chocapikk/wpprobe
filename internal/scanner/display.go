@@ -61,11 +61,38 @@ type VulnCategories struct {
 	Low      []string
 }
 
-func buildPluginVulns(resultsList []utils.PluginEntry) map[string]VulnCategories {
-	pluginVulns := make(map[string]VulnCategories)
+type PluginVulnerabilities struct {
+	Plugins map[string]VulnCategories
+}
+
+type PluginAuthGroups struct {
+	Plugins map[string]SeverityAuthGroup
+}
+
+type SeverityAuthGroup struct {
+	Severities map[string]AuthGroup
+}
+
+type AuthGroup struct {
+	AuthTypes map[string][]string
+}
+
+type PluginDisplayData struct {
+	name        string
+	confidence  float64
+	noVersion   bool
+	hasCritical bool
+	hasHigh     bool
+	hasMedium   bool
+	hasLow      bool
+	hasVuln     bool
+}
+
+func buildPluginVulns(resultsList []utils.PluginEntry) PluginVulnerabilities {
+	pluginVulns := PluginVulnerabilities{Plugins: make(map[string]VulnCategories)}
 	for _, entry := range resultsList {
 		severity := cases.Title(language.Und, cases.NoLower).String(strings.ToLower(entry.Severity))
-		cat := pluginVulns[entry.Plugin]
+		cat := pluginVulns.Plugins[entry.Plugin]
 		if len(entry.CVEs) > 0 {
 			switch severity {
 			case "Critical":
@@ -78,22 +105,27 @@ func buildPluginVulns(resultsList []utils.PluginEntry) map[string]VulnCategories
 				cat.Low = append(cat.Low, entry.CVEs[0])
 			}
 		}
-		pluginVulns[entry.Plugin] = cat
+		pluginVulns.Plugins[entry.Plugin] = cat
 	}
 	return pluginVulns
 }
 
-func buildPluginAuthGroups(
-	resultsList []utils.PluginEntry,
-) map[string]map[string]map[string][]string {
-	pluginAuthGroups := make(map[string]map[string]map[string][]string)
+func buildPluginAuthGroups(resultsList []utils.PluginEntry) PluginAuthGroups {
+	pluginAuthGroups := PluginAuthGroups{Plugins: make(map[string]SeverityAuthGroup)}
+
 	for _, entry := range resultsList {
 		severity := cases.Title(language.Und, cases.NoLower).String(strings.ToLower(entry.Severity))
-		if _, ok := pluginAuthGroups[entry.Plugin]; !ok {
-			pluginAuthGroups[entry.Plugin] = make(map[string]map[string][]string)
+
+		if _, ok := pluginAuthGroups.Plugins[entry.Plugin]; !ok {
+			pluginAuthGroups.Plugins[entry.Plugin] = SeverityAuthGroup{
+				Severities: make(map[string]AuthGroup),
+			}
 		}
-		if _, ok := pluginAuthGroups[entry.Plugin][severity]; !ok {
-			pluginAuthGroups[entry.Plugin][severity] = make(map[string][]string)
+
+		if _, ok := pluginAuthGroups.Plugins[entry.Plugin].Severities[severity]; !ok {
+			pluginAuthGroups.Plugins[entry.Plugin].Severities[severity] = AuthGroup{
+				AuthTypes: make(map[string][]string),
+			}
 		}
 
 		authKey := strings.ToLower(entry.AuthType)
@@ -102,10 +134,11 @@ func buildPluginAuthGroups(
 		}
 
 		if len(entry.CVEs) > 0 {
-			pluginAuthGroups[entry.Plugin][severity][authKey] = append(
-				pluginAuthGroups[entry.Plugin][severity][authKey],
-				entry.CVEs[0],
-			)
+			pluginAuthGroups.Plugins[entry.Plugin].Severities[severity].AuthTypes[authKey] =
+				append(
+					pluginAuthGroups.Plugins[entry.Plugin].Severities[severity].AuthTypes[authKey],
+					entry.CVEs[0],
+				)
 		}
 	}
 	return pluginAuthGroups
@@ -117,105 +150,97 @@ func buildSummaryLine(
 	vulnTypes []string,
 	vulnStyles map[string]lipgloss.Style,
 ) string {
+	getCount := map[string]func(VulnCategories) int{
+		"Critical": func(v VulnCategories) int { return len(v.Critical) },
+		"High":     func(v VulnCategories) int { return len(v.High) },
+		"Medium":   func(v VulnCategories) int { return len(v.Medium) },
+		"Low":      func(v VulnCategories) int { return len(v.Low) },
+	}
+
 	var summaryParts []string
 	for _, t := range vulnTypes {
-		count := 0
+		var total int
 		for _, cat := range pluginVulns {
-			switch t {
-			case "Critical":
-				count += len(cat.Critical)
-			case "High":
-				count += len(cat.High)
-			case "Medium":
-				count += len(cat.Medium)
-			case "Low":
-				count += len(cat.Low)
-			}
+			total += getCount[t](cat)
 		}
-		summaryParts = append(summaryParts, fmt.Sprintf("%s: %d", vulnStyles[t].Render(t), count))
+		summaryParts = append(summaryParts, fmt.Sprintf("%s: %d", vulnStyles[t].Render(t), total))
 	}
-	return fmt.Sprintf("🔎 %s (%s)", urlStyle.Render(target), strings.Join(summaryParts, " | "))
+
+	return fmt.Sprintf("🔎 %s (%s)",
+		urlStyle.Render(target),
+		strings.Join(summaryParts, " | "),
+	)
 }
 
 func DisplayResults(
 	target string,
-	detectedPlugins map[string]string,
-	pluginResult PluginDetectionResult,
-	resultsList []utils.PluginEntry,
+	detected map[string]string,
+	pluginRes PluginDetectionResult,
+	results []utils.PluginEntry,
 	opts ScanOptions,
 	progress *utils.ProgressManager,
 ) {
-	vulnTypes := []string{"Critical", "High", "Medium", "Low"}
-	vulnStyles := map[string]lipgloss.Style{
+	if len(results) == 0 {
+		fmt.Println(noVulnStyle.Render("No vulnerabilities found for target: " + target))
+		return
+	}
+
+	pv := buildPluginVulns(results)
+	pa := buildPluginAuthGroups(results)
+
+	if progress != nil {
+		progress.RenderBlank()
+	}
+
+	vTypes := []string{"Critical", "High", "Medium", "Low"}
+	vStyles := map[string]lipgloss.Style{
 		"Critical": criticalStyle,
 		"High":     highStyle,
 		"Medium":   mediumStyle,
 		"Low":      lowStyle,
 	}
 
-	if len(resultsList) == 0 {
-		fmt.Println(noVulnStyle.Render("No vulnerabilities found for target: " + target))
-		return
-	}
+	summary := buildSummaryLine(target, pv.Plugins, vTypes, vStyles)
+	root := tree.Root(titleStyle.Render(summary))
 
-	pluginVulns := buildPluginVulns(resultsList)
-	pluginAuthGroups := buildPluginAuthGroups(resultsList)
+	for _, plugin := range sortedPluginsByConfidence(detected, pluginRes.Plugins, pv.Plugins) {
+		version := detected[plugin]
+		conf := pluginRes.Plugins[plugin].Confidence
+		label := formatPluginLabel(plugin, version, conf, pluginRes.Plugins[plugin].Ambiguous)
 
-	if progress != nil {
-		progress.RenderBlank()
-	}
+		vulnCat, ok := pv.Plugins[plugin]
+		plNode := tree.Root(getPluginColor(version, vulnCat, ok).Render(label))
 
-	summaryLine := buildSummaryLine(target, pluginVulns, vulnTypes, vulnStyles)
-	root := tree.Root(titleStyle.Render(summaryLine))
-
-	for _, plugin := range sortedPluginsByConfidence(detectedPlugins, pluginResult.Confidence, pluginVulns) {
-		version := detectedPlugins[plugin]
-		confidence := pluginResult.Confidence[plugin]
-		pluginLabel := formatPluginLabel(
-			plugin,
-			version,
-			confidence,
-			pluginResult.Ambiguity[plugin],
-		)
-		pluginNode := tree.Root(getPluginColor(version, pluginVulns[plugin]).Render(pluginLabel))
-
-		if authGroups, ok := pluginAuthGroups[plugin]; ok {
-			for _, severity := range vulnTypes {
-				if groups, ok := authGroups[severity]; ok {
-					severityNode := tree.Root(vulnStyles[severity].Render(severity))
-					for _, key := range []string{"unauth", "auth", "privileged", "unknown"} {
-						if cves, ok := groups[key]; ok && len(cves) > 0 {
-							var label string
-							switch key {
-							case "unauth":
-								label = unauthStyle.Render("Unauth")
-							case "auth":
-								label = authStyle.Render("Auth")
-							case "privileged":
-								label = privilegedStyle.Render("Privileged")
-							default:
-								label = unknownStyle.Render("Unknown")
-							}
-							authNode := tree.Root(label)
-							for i := 0; i < len(cves); i += 4 {
-								end := i + 4
-								if end > len(cves) {
-									end = len(cves)
-								}
-								authNode.Child(strings.Join(cves[i:end], " ⋅ "))
-							}
-							severityNode.Child(authNode)
-						}
-					}
-					pluginNode.Child(severityNode)
+		authGroups, hasAG := pa.Plugins[plugin]
+		if hasAG {
+			for _, sev := range vTypes {
+				sGrp, sOk := authGroups.Severities[sev]
+				if !sOk {
+					continue
 				}
+				sevNode := tree.Root(vStyles[sev].Render(sev))
+				for _, key := range []string{"unauth", "auth", "privileged", "unknown"} {
+					cves, cOk := sGrp.AuthTypes[key]
+					if !cOk || len(cves) == 0 {
+						continue
+					}
+					authNode := tree.Root(authLabel(key))
+					for i := 0; i < len(cves); i += 4 {
+						end := i + 4
+						if end > len(cves) {
+							end = len(cves)
+						}
+						authNode.Child(strings.Join(cves[i:end], " ⋅ "))
+					}
+					sevNode.Child(authNode)
+				}
+				plNode.Child(sevNode)
 			}
 		}
-
-		root.Child(pluginNode)
+		root.Child(plNode)
 	}
 
-	if len(pluginResult.Ambiguity) > 0 {
+	if len(pluginRes.Detected) > 0 {
 		root.Child(
 			tree.Root(
 				"⚠️ indicates that multiple plugins share common endpoints; only one of these is likely active.",
@@ -223,124 +248,115 @@ func DisplayResults(
 		)
 	}
 
-	encapsulatedResults := separatorStyle.Render(root.String())
+	out := separatorStyle.Render(root.String())
 	if progress != nil {
-		progress.Bprintln(encapsulatedResults)
+		progress.Bprintln(out)
 	} else {
-		fmt.Println(encapsulatedResults)
+		fmt.Println(out)
+	}
+}
+
+func authLabel(k string) string {
+	switch k {
+	case "unauth":
+		return unauthStyle.Render("Unauth")
+	case "auth":
+		return authStyle.Render("Auth")
+	case "privileged":
+		return privilegedStyle.Render("Privileged")
+	default:
+		return unknownStyle.Render("Unknown")
 	}
 }
 
 func sortedPluginsByConfidence(
 	detectedPlugins map[string]string,
-	pluginConfidence map[string]float64,
+	pluginData map[string]*PluginData,
 	pluginVulns map[string]VulnCategories,
 ) []string {
-	type PluginData struct {
-		name        string
-		confidence  float64
-		noVersion   bool
-		hasCritical bool
-		hasHigh     bool
-		hasMedium   bool
-		hasLow      bool
-		hasVuln     bool
-	}
-	plugins := make([]PluginData, 0, len(detectedPlugins))
 
+	var plugins []PluginDisplayData
 	for plugin, version := range detectedPlugins {
 		noVersion := version == "unknown"
-		vulns := pluginVulns[plugin]
+		data := pluginData[plugin]
+		vulns, existsV := pluginVulns[plugin]
+		hc, hh, hm, hl := false, false, false, false
+		if existsV {
+			hc, hh, hm, hl = len(
+				vulns.Critical,
+			) > 0, len(
+				vulns.High,
+			) > 0, len(
+				vulns.Medium,
+			) > 0, len(
+				vulns.Low,
+			) > 0
+		}
 
-		hasCritical := len(vulns.Critical) > 0
-		hasHigh := len(vulns.High) > 0
-		hasMedium := len(vulns.Medium) > 0
-		hasLow := len(vulns.Low) > 0
-		hasVuln := hasCritical || hasHigh || hasMedium || hasLow
-
-		plugins = append(plugins, PluginData{
+		plugins = append(plugins, PluginDisplayData{
 			name:        plugin,
-			confidence:  pluginConfidence[plugin],
+			confidence:  data.Confidence,
 			noVersion:   noVersion,
-			hasCritical: hasCritical,
-			hasHigh:     hasHigh,
-			hasMedium:   hasMedium,
-			hasLow:      hasLow,
-			hasVuln:     hasVuln,
+			hasCritical: hc,
+			hasHigh:     hh,
+			hasMedium:   hm,
+			hasLow:      hl,
+			hasVuln:     hc || hh || hm || hl,
 		})
 	}
 
 	sort.Slice(plugins, func(i, j int) bool {
-		if plugins[i].hasCritical && !plugins[j].hasCritical {
-			return true
+		a, b := plugins[i], plugins[j]
+		switch {
+		case a.hasCritical != b.hasCritical:
+			return a.hasCritical
+		case a.hasHigh != b.hasHigh:
+			return a.hasHigh
+		case a.hasMedium != b.hasMedium:
+			return a.hasMedium
+		case a.hasLow != b.hasLow:
+			return a.hasLow
+		case a.noVersion != b.noVersion:
+			return !a.noVersion
+		case a.confidence != b.confidence:
+			return a.confidence > b.confidence
+		default:
+			return a.name < b.name
 		}
-		if !plugins[i].hasCritical && plugins[j].hasCritical {
-			return false
-		}
-
-		if plugins[i].hasHigh && !plugins[j].hasHigh {
-			return true
-		}
-		if !plugins[i].hasHigh && plugins[j].hasHigh {
-			return false
-		}
-
-		if plugins[i].hasMedium && !plugins[j].hasMedium {
-			return true
-		}
-		if !plugins[i].hasMedium && plugins[j].hasMedium {
-			return false
-		}
-
-		if plugins[i].hasLow && !plugins[j].hasLow {
-			return true
-		}
-		if !plugins[i].hasLow && plugins[j].hasLow {
-			return false
-		}
-
-		if !plugins[i].noVersion && plugins[j].noVersion {
-			return true
-		}
-		if plugins[i].noVersion && !plugins[j].noVersion {
-			return false
-		}
-
-		if plugins[i].confidence != plugins[j].confidence {
-			return plugins[i].confidence > plugins[j].confidence
-		}
-
-		return plugins[i].name < plugins[j].name
 	})
 
-	sortedPlugins := make([]string, len(plugins))
+	sorted := make([]string, len(plugins))
 	for i, p := range plugins {
-		sortedPlugins[i] = p.name
+		sorted[i] = p.name
 	}
-	return sortedPlugins
+	return sorted
 }
 
-func formatPluginLabel(plugin, version string, confidence float64, ambiguous bool) string {
-	if ambiguous {
-		return fmt.Sprintf("%s (%s) ⚠️", plugin, version)
+func formatPluginLabel(p, v string, c float64, a bool) string {
+	if a {
+		return fmt.Sprintf("%s (%s) [%.2f%% confidence] ⚠️", p, v, c)
+	} else if v == "unknown" {
+		return fmt.Sprintf("%s (%s) [%.2f%% confidence]", p, v, c)
+	} else {
+		return fmt.Sprintf("%s (%s)", p, v)
 	}
-	if version == "unknown" {
-		return fmt.Sprintf("%s (%s) [%.2f%% confidence]", plugin, version, confidence)
-	}
-	return fmt.Sprintf("%s (%s)", plugin, version)
 }
 
-func getPluginColor(version string, vulnCategories VulnCategories) lipgloss.Style {
-	if version == "unknown" {
+func getPluginColor(version string, v VulnCategories, ok bool) lipgloss.Style {
+	switch {
+	case version == "unknown":
 		return noVersionStyle
-	} else if len(vulnCategories.Critical) > 0 {
+	case !ok:
+		return noVulnStyle
+	case len(v.Critical) > 0:
 		return criticalStyle
-	} else if len(vulnCategories.High) > 0 {
+	case len(v.High) > 0:
 		return highStyle
-	} else if len(vulnCategories.Medium) > 0 {
+	case len(v.Medium) > 0:
 		return mediumStyle
-	} else if len(vulnCategories.Low) > 0 {
+	case len(v.Low) > 0:
 		return lowStyle
+	default:
+		return noVulnStyle
 	}
-	return noVulnStyle
 }

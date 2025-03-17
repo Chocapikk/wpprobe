@@ -138,3 +138,22 @@ func Test_uninstall(t *testing.T) {
 		t.Errorf("Fake binary was not removed")
 	}
 }
+
+func Test_mustErr(t *testing.T) {
+	type args struct {
+		err           error
+		msg           string
+		DefaultLogger *utils.Logger
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mustErr(tt.args.err, tt.args.msg, tt.args.DefaultLogger)
+		})
+	}
+}
