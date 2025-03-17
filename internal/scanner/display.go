@@ -32,14 +32,15 @@ import (
 )
 
 var (
-	urlStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FFFF"))
-	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
-	noVulnStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF00"))
-	noVersionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#808080"))
-	criticalStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF0000"))
-	highStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF4500"))
-	mediumStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
-	lowStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFF00"))
+	bold           = lipgloss.NewStyle().Bold(true)
+	urlStyle       = bold.Foreground(lipgloss.Color("#00FFFF"))
+	titleStyle     = bold.Foreground(lipgloss.Color("#FFA500"))
+	noVulnStyle    = bold.Foreground(lipgloss.Color("#00FF00"))
+	noVersionStyle = bold.Foreground(lipgloss.Color("#808080"))
+	criticalStyle  = bold.Foreground(lipgloss.Color("#FF0000"))
+	highStyle      = bold.Foreground(lipgloss.Color("#FF4500"))
+	mediumStyle    = bold.Foreground(lipgloss.Color("#FFA500"))
+	lowStyle       = bold.Foreground(lipgloss.Color("#FFFF00"))
 
 	separatorStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -47,10 +48,10 @@ var (
 			Padding(0, 2).
 			Margin(1, 0)
 
-	unauthStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF0000"))
-	authStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF00"))
-	privilegedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8A2BE2"))
-	unknownStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
+	unauthStyle     = bold.Foreground(lipgloss.Color("#FF0000"))
+	authStyle       = bold.Foreground(lipgloss.Color("#00FF00"))
+	privilegedStyle = bold.Foreground(lipgloss.Color("#8A2BE2"))
+	unknownStyle    = bold.Foreground(lipgloss.Color("#FFA500"))
 )
 
 type VulnCategories struct {
