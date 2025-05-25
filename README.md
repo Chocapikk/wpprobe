@@ -16,12 +16,13 @@
 
 Unlike traditional scanners that hammer websites with requests, WPProbe takes a smarter approach by querying the exposed REST API. This technique allows us to **identify plugins stealthily**, reducing detection risks and **speeding up the scan process**.  
 
-📌 **Currently, over 3030 plugins** can be identified using this method!  
+📌 **Currently, over 3030 plugins** can be identified using the stealthy method, and thousands more with the brute-force capabilities!
 
 ---
 
 ## 🚀 How It Works  
 
+### Stealthy Mode (Default)
 1️⃣ **Fetch** a list of known WordPress plugins from a precompiled database (Wordfence).  
 2️⃣ **Scan** the target site for exposed REST API routes (`?rest_route=/`).  
 3️⃣ **Match** the discovered endpoints with known plugin signatures.  
@@ -31,23 +32,53 @@ Unlike traditional scanners that hammer websites with requests, WPProbe takes a 
 
 🔥 **This means fewer requests, faster scans, and a lower chance of getting blocked by WAFs or security plugins!**  
 
+### Brute-Force Mode
+1️⃣ **Load** a comprehensive list of WordPress plugins (600+ common plugins by default).  
+2️⃣ **Check** for the existence of each plugin by directly requesting its directory.  
+3️⃣ **Detect** plugins based on HTTP response codes (non-404 responses indicate plugin exists).  
+4️⃣ **Retrieve** versions and check for vulnerabilities as in stealthy mode.  
+5️⃣ **Output** the results in your preferred format.  
+
+### Hybrid Mode
+1️⃣ **Start** with a stealthy scan using REST API endpoints.  
+2️⃣ **Record** all plugins found via the stealthy method.  
+3️⃣ **Continue** with a brute-force scan, skipping plugins already detected.  
+4️⃣ **Combine** results from both methods for maximum detection coverage.  
+5️⃣ **Process** vulnerability information and output results.  
+
+🔄 **Hybrid mode gives you the best of both worlds: the stealth of REST API scanning with the thoroughness of brute-force!**  
+
 ---
 
 ## ⚙️ Features  
 
-✅ **Stealthy detection** – No need to brute-force plugins; just ask WordPress nicely.  
+✅ **Multiple scanning modes**:
+   - **Stealthy mode** – Uses REST API to detect plugins with minimal footprint
+   - **Brute-force mode** – Comprehensive plugin detection using direct requests
+   - **Hybrid mode** – Starts with stealthy scanning then uses brute-force only for remaining plugins
 ✅ **High-speed scanning** – Multithreaded scanning with a sleek progress bar.  
 ✅ **Vulnerability mapping** – Automatically associates detected plugins with known CVEs.  
 ✅ **Multiple output formats** – Save results in **CSV** or **JSON**.  
 ✅ **Resilient scanning** – Handles sites with missing version info gracefully.  
+✅ **Optimized detection** – Intelligently combines methods to maximize plugin discovery.
 
 ---
 
 ## 📌 Limitations  
 
-🔹 Some plugins don’t expose REST API endpoints, making them undetectable via this method.  
+### Stealthy Mode
+🔹 Some plugins don't expose REST API endpoints, making them undetectable via this method.  
 🔹 If a plugin is outdated, disabled, or hidden by security plugins, it may not be detected.  
 🔹 The technique relies on a predefined plugin-to-endpoint mapping, which is regularly updated.  
+
+### Brute-Force Mode
+🔹 Generates more HTTP requests, which may trigger security mechanisms or rate limits.  
+🔹 Less stealthy than REST API scanning as it directly probes for plugin directories.  
+🔹 Limited by the plugin list's comprehensiveness.  
+
+### Hybrid Mode
+🔹 Still generates a significant number of requests after the stealthy phase.  
+🔹 May take longer to complete than pure stealthy mode.  
 
 ---
 
@@ -104,10 +135,28 @@ Update the local Wordfence vulnerability database:
 ./wpprobe update-db
 ```
 
-### **Basic scan for a single website**  
-Scan a single WordPress site:  
+### **Basic scan for a single website (Stealthy mode - default)**  
+Scan a single WordPress site using the default stealthy mode:  
 ```bash
 ./wpprobe scan -u https://example.com
+```
+
+### **Use brute-force mode for comprehensive scanning**  
+Scan a WordPress site using brute-force detection:  
+```bash
+./wpprobe scan -u https://example.com --mode bruteforce
+```
+
+### **Use hybrid mode for optimal balance of stealth and thoroughness**  
+Scan a WordPress site using hybrid mode (stealthy first, then brute-force for remaining plugins):  
+```bash
+./wpprobe scan -u https://example.com --mode hybrid
+```
+
+### **Provide a custom plugin list for brute-force scanning**  
+Use a custom list of plugins for brute-force or hybrid scanning:  
+```bash
+./wpprobe scan -u https://example.com --mode bruteforce --plugin-list my-plugins.txt
 ```
 
 ### **Scan multiple targets from a file with 20 concurrent threads**  
@@ -122,7 +171,7 @@ Save scan results to a CSV file:
 ./wpprobe scan -f targets.txt -t 20 -o results.csv
 ```
 
-**Save results to a JSON File**  
+### **Save results to a JSON File**  
 Save scan results to a JSON file:  
 ```bash
 ./wpprobe scan -f targets.txt -t 20 -o results.json

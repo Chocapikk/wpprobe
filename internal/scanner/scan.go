@@ -147,7 +147,7 @@ func performBruteforceScan(target string, opts ScanOptions, progress *utils.Prog
 	}
 
 	detected := BruteforcePlugins(target, plugins, opts.Threads, progress)
-	
+
 	// Create a fake PluginDetectionResult for consistency with other scan methods
 	pluginResult := PluginDetectionResult{
 		Plugins:  make(map[string]*PluginData),
@@ -169,31 +169,31 @@ func performBruteforceScan(target string, opts ScanOptions, progress *utils.Prog
 // performHybridScan performs a hybrid scan that first uses stealthy mode and then brute-force mode, skipping already found plugins
 func performHybridScan(target string, opts ScanOptions, progress *utils.ProgressManager) ([]string, PluginDetectionResult) {
 	utils.DefaultLogger.Info("Starting hybrid scan: first stealthy, then brute-force...")
-	
+
 	// First perform stealthy scan
 	stealthyDetected, stealthyResult := performStealthyScan(target, opts, progress)
-	
+
 	// If stealthy scan found nothing, just do a full brute-force scan
 	if len(stealthyDetected) == 0 {
 		return performBruteforceScan(target, opts, progress)
 	}
-	
+
 	// Get plugin list for brute-force
 	plugins, err := LoadPluginsFromFile(opts.PluginList)
 	if err != nil {
 		utils.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
 		return stealthyDetected, stealthyResult
 	}
-	
+
 	// Reset progress bar for brute-force phase
 	if progress != nil && opts.File == "" {
 		progress.SetTotal(len(plugins))
 		progress.SetMessage("🔎 Hybrid scan: bruteforcing remaining plugins...")
 	}
-	
+
 	// Perform hybrid scan
 	allDetected := HybridScan(target, stealthyDetected, plugins, opts.Threads, progress)
-	
+
 	// Update the plugin result to include all detected plugins
 	pluginResult := stealthyResult
 	for _, plugin := range allDetected {
@@ -207,11 +207,9 @@ func performHybridScan(target string, opts ScanOptions, progress *utils.Progress
 		}
 	}
 	pluginResult.Detected = allDetected
-	
+
 	return allDetected, pluginResult
 }
-
-
 
 func ScanSite(
 	target string,
@@ -232,15 +230,15 @@ func ScanSite(
 	case "stealthy":
 		// Original stealthy detection method using REST API endpoints
 		detectedPlugins, pluginResult = performStealthyScan(target, opts, progress)
-	
+
 	case "bruteforce":
 		// Brute-force detection method using plugin list
 		detectedPlugins, pluginResult = performBruteforceScan(target, opts, progress)
-	
+
 	case "hybrid":
 		// Hybrid mode: first stealthy, then brute-force skipping already found plugins
 		detectedPlugins, pluginResult = performHybridScan(target, opts, progress)
-	
+
 	default:
 		utils.DefaultLogger.Warning("Unknown scan mode '" + opts.ScanMode + "', defaulting to stealthy")
 		detectedPlugins, pluginResult = performStealthyScan(target, opts, progress)

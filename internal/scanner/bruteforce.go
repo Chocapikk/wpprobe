@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Yiğit İbrahim (ibrahimsql) <ibrahimsql@protonmail.com>
+// Copyright (c) 2025 Yiğit İbrahim (ibrahimsql) <ibrahimsql@proton.me>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -39,7 +39,7 @@ func LoadPluginsFromFile(filename string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load default plugin list: %v", err)
 		}
-		
+
 		// Parse the file content line by line
 		var plugins []string
 		scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -97,7 +97,7 @@ func BruteforcePlugins(
 			if !strings.HasPrefix(normalizedURL, "http://") && !strings.HasPrefix(normalizedURL, "https://") {
 				normalizedURL = "https://" + normalizedURL
 			}
-			
+
 			url := fmt.Sprintf("%s/wp-content/plugins/%s/", normalizedURL, plugin)
 			req, err := http.NewRequest("HEAD", url, nil)
 			if err != nil {
