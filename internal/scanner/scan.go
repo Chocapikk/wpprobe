@@ -35,6 +35,8 @@ type ScanOptions struct {
 	Output         string
 	OutputFormat   string
 	Verbose        bool
+	ScanMode       string
+	PluginList     string
 }
 
 func ScanTargets(opts ScanOptions) {
@@ -97,23 +99,22 @@ func ScanTargets(opts ScanOptions) {
 	}
 }
 
-func ScanSite(
-	target string,
-	opts ScanOptions,
-	writer utils.WriterInterface,
-	progress *utils.ProgressManager,
-	vulnerabilityData []wordfence.Vulnerability,
-) {
+// performStealthyScan performs the original stealthy detection method using REST API endpoints
+func performStealthyScan(target string, opts ScanOptions, progress *utils.ProgressManager) ([]string, PluginDetectionResult) {
+	// Update progress message if available
+	if progress != nil && opts.File == "" {
+		progress.SetMessage("🔎 Scanning REST API endpoints...")
+	}
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
 		utils.DefaultLogger.Error("Failed to load scanned_plugins.json: " + err.Error())
-		return
+		return nil, PluginDetectionResult{}
 	}
 
 	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
 		utils.DefaultLogger.Error("Failed to parse scanned_plugins.json: " + err.Error())
-		return
+		return nil, PluginDetectionResult{}
 	}
 
 	endpoints := FetchEndpoints(target)
@@ -121,11 +122,131 @@ func ScanSite(
 		if opts.File == "" {
 			utils.DefaultLogger.Warning("No REST endpoints found on " + target)
 		}
-		return
+		return nil, PluginDetectionResult{}
 	}
 
 	pluginResult := DetectPlugins(endpoints, pluginEndpoints)
 	if len(pluginResult.Detected) == 0 {
+		return nil, pluginResult
+	}
+
+	return pluginResult.Detected, pluginResult
+}
+
+// performBruteforceScan performs a brute-force detection method using a plugin list
+func performBruteforceScan(target string, opts ScanOptions, progress *utils.ProgressManager) ([]string, PluginDetectionResult) {
+	plugins, err := LoadPluginsFromFile(opts.PluginList)
+	if err != nil {
+		utils.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
+		return nil, PluginDetectionResult{}
+	}
+
+	if progress != nil && opts.File == "" {
+		progress.SetTotal(len(plugins))
+		progress.SetMessage("🔎 Bruteforcing plugins...")
+	}
+
+	detected := BruteforcePlugins(target, plugins, opts.Threads, progress)
+	
+	// Create a fake PluginDetectionResult for consistency with other scan methods
+	pluginResult := PluginDetectionResult{
+		Plugins:  make(map[string]*PluginData),
+		Detected: detected,
+	}
+
+	for _, plugin := range detected {
+		pluginResult.Plugins[plugin] = &PluginData{
+			Score:      1,
+			Confidence: 100.0,
+			Ambiguous:  false,
+			Matches:    []string{},
+		}
+	}
+
+	return detected, pluginResult
+}
+
+// performHybridScan performs a hybrid scan that first uses stealthy mode and then brute-force mode, skipping already found plugins
+func performHybridScan(target string, opts ScanOptions, progress *utils.ProgressManager) ([]string, PluginDetectionResult) {
+	utils.DefaultLogger.Info("Starting hybrid scan: first stealthy, then brute-force...")
+	
+	// First perform stealthy scan
+	stealthyDetected, stealthyResult := performStealthyScan(target, opts, progress)
+	
+	// If stealthy scan found nothing, just do a full brute-force scan
+	if len(stealthyDetected) == 0 {
+		return performBruteforceScan(target, opts, progress)
+	}
+	
+	// Get plugin list for brute-force
+	plugins, err := LoadPluginsFromFile(opts.PluginList)
+	if err != nil {
+		utils.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
+		return stealthyDetected, stealthyResult
+	}
+	
+	// Reset progress bar for brute-force phase
+	if progress != nil && opts.File == "" {
+		progress.SetTotal(len(plugins))
+		progress.SetMessage("🔎 Hybrid scan: bruteforcing remaining plugins...")
+	}
+	
+	// Perform hybrid scan
+	allDetected := HybridScan(target, stealthyDetected, plugins, opts.Threads, progress)
+	
+	// Update the plugin result to include all detected plugins
+	pluginResult := stealthyResult
+	for _, plugin := range allDetected {
+		if _, exists := pluginResult.Plugins[plugin]; !exists {
+			pluginResult.Plugins[plugin] = &PluginData{
+				Score:      1,
+				Confidence: 100.0,
+				Ambiguous:  false,
+				Matches:    []string{},
+			}
+		}
+	}
+	pluginResult.Detected = allDetected
+	
+	return allDetected, pluginResult
+}
+
+
+
+func ScanSite(
+	target string,
+	opts ScanOptions,
+	writer utils.WriterInterface,
+	progress *utils.ProgressManager,
+	vulnerabilityData []wordfence.Vulnerability,
+) {
+	// Default to stealthy mode if not specified
+	if opts.ScanMode == "" {
+		opts.ScanMode = "stealthy"
+	}
+
+	var detectedPlugins []string
+	var pluginResult PluginDetectionResult
+
+	switch opts.ScanMode {
+	case "stealthy":
+		// Original stealthy detection method using REST API endpoints
+		detectedPlugins, pluginResult = performStealthyScan(target, opts, progress)
+	
+	case "bruteforce":
+		// Brute-force detection method using plugin list
+		detectedPlugins, pluginResult = performBruteforceScan(target, opts, progress)
+	
+	case "hybrid":
+		// Hybrid mode: first stealthy, then brute-force skipping already found plugins
+		detectedPlugins, pluginResult = performHybridScan(target, opts, progress)
+	
+	default:
+		utils.DefaultLogger.Warning("Unknown scan mode '" + opts.ScanMode + "', defaulting to stealthy")
+		detectedPlugins, pluginResult = performStealthyScan(target, opts, progress)
+	}
+
+	if len(detectedPlugins) == 0 {
 		if opts.File == "" {
 			utils.DefaultLogger.Warning("No plugins detected on " + target)
 		}

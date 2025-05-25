@@ -119,3 +119,9 @@ func (p *ProgressManager) SetTotal(total int) {
 	defer p.mu.Unlock()
 	p.bar.ChangeMax(total)
 }
+
+func (p *ProgressManager) SetMessage(description string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.bar.Describe("[cyan]" + description)
+}
