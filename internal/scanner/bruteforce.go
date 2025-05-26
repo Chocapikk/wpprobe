@@ -23,7 +23,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -68,58 +67,73 @@ func BruteforcePlugins(
 	threads int,
 	progress *utils.ProgressManager,
 ) []string {
+	if len(plugins) == 0 {
+		utils.DefaultLogger.Warning("No plugins provided for brute-force scan")
+		return []string{}
+	}
+
+	utils.DefaultLogger.Info(fmt.Sprintf("Starting brute-force scan with %d plugins", len(plugins)))
+
 	var detected []string
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	sem := make(chan struct{}, threads)
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	// Use the HTTP client manager from utils package with a 10-second timeout
+	httpClient := utils.NewHTTPClient(10 * time.Second)
+	// Normalize the target URL using the utility function
+	normalizedURL := utils.NormalizeURL(target)
+
+	// Initialize HTTP client and normalize URL
 
 	for _, plugin := range plugins {
 		wg.Add(1)
 		sem <- struct{}{}
-
+		
 		go func(plugin string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			defer func() { _ = recover() }()
+			defer func() {
+				if r := recover(); r != nil {
+					utils.DefaultLogger.Error(fmt.Sprintf("Panic occurred while scanning plugin %s: %v", plugin, r))
+				}
+			}()
 
-			// Normalize URL
-			normalizedURL := target
-			// Remove trailing slash if present
-			normalizedURL = strings.TrimSuffix(normalizedURL, "/")
-			// Ensure URL has http:// or https:// prefix
-			if !strings.HasPrefix(normalizedURL, "http://") && !strings.HasPrefix(normalizedURL, "https://") {
-				normalizedURL = "https://" + normalizedURL
+			// Check for the plugin's readme.txt file instead of just the directory
+			// This is more reliable for fingerprinting and consistent with stealthy mode
+			url := fmt.Sprintf("%s/wp-content/plugins/%s/readme.txt", normalizedURL, plugin)
+			
+			// Implement retry mechanism for failed requests (up to 2 retries)
+			const maxRetries = 2
+			var err error
+			
+			for retry := 0; retry <= maxRetries; retry++ {
+				// Use the HTTP client manager's Get method which handles User-Agent and other details
+				_, err = httpClient.Get(url)
+				
+				// If successful or not a 404, break the retry loop
+				if err == nil || !strings.Contains(err.Error(), "404") {
+					break
+				}
+				
+				// Only retry on network errors, not on 404s (which mean the plugin doesn't exist)
+				if strings.Contains(err.Error(), "404") {
+					break
+				}
+				
+				if retry < maxRetries {
+					// Exponential backoff: sleep 1s, then 2s before retrying
+					time.Sleep(time.Duration(retry+1) * time.Second)
+				}
 			}
-
-			url := fmt.Sprintf("%s/wp-content/plugins/%s/", normalizedURL, plugin)
-			req, err := http.NewRequest("HEAD", url, nil)
-			if err != nil {
-				return
-			}
-
-			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-
-			resp, err := client.Do(req)
-			if err != nil {
-				return
-			}
-			defer resp.Body.Close()
-
-			// Plugins typically return 200 OK or 403 Forbidden if they exist
-			// 404 Not Found means the plugin doesn't exist
-			if resp.StatusCode != 404 {
+			
+			// If we get a successful response or a non-404 error, the plugin likely exists
+			if err == nil || !strings.Contains(err.Error(), "404") {
 				mu.Lock()
 				detected = append(detected, plugin)
 				mu.Unlock()
 			}
-
+			
 			if progress != nil {
 				progress.Increment()
 			}
@@ -127,6 +141,8 @@ func BruteforcePlugins(
 	}
 
 	wg.Wait()
+	
+	utils.DefaultLogger.Info(fmt.Sprintf("Brute-force scan completed. Detected %d plugins.", len(detected)))
 	return detected
 }
 
@@ -138,26 +154,46 @@ func HybridScan(
 	threads int,
 	progress *utils.ProgressManager,
 ) []string {
+	utils.DefaultLogger.Info("Starting hybrid scan")
+	utils.DefaultLogger.Info(fmt.Sprintf("Stealthy scan detected %d plugins", len(stealthyPlugins)))
+
+	// For empty stealthy results, just run bruteforce directly
+	if len(stealthyPlugins) == 0 {
+		utils.DefaultLogger.Info("No plugins detected in stealthy scan, performing full brute-force scan")
+		return BruteforcePlugins(target, bruteforcePlugins, threads, progress)
+	}
+
 	// Create a map of detected plugins from stealthy scan for quick lookup
-	detectedMap := make(map[string]bool)
+	detectedMap := make(map[string]bool, len(stealthyPlugins))
 	for _, plugin := range stealthyPlugins {
 		detectedMap[plugin] = true
 	}
 
+	// Pre-allocate the remaining plugins slice to improve performance
+	remainingPlugins := make([]string, 0, len(bruteforcePlugins))
+	skippedCount := 0
+
 	// Filter out plugins that were already found in stealthy scan
-	var remainingPlugins []string
 	for _, plugin := range bruteforcePlugins {
 		if !detectedMap[plugin] {
 			remainingPlugins = append(remainingPlugins, plugin)
+		} else {
+			skippedCount++
 		}
 	}
+
+	utils.DefaultLogger.Info(fmt.Sprintf("Skipping %d plugins already found in stealthy scan", skippedCount))
+	utils.DefaultLogger.Info(fmt.Sprintf("Continuing with brute-force scan for %d remaining plugins", len(remainingPlugins)))
 
 	// Bruteforce remaining plugins
 	bruteforceDetected := BruteforcePlugins(target, remainingPlugins, threads, progress)
 
-	// Combine results
-	result := append([]string{}, stealthyPlugins...)
+	// Combine results - pre-allocate slice with exact size needed
+	resultSize := len(stealthyPlugins) + len(bruteforceDetected)
+	result := make([]string, len(stealthyPlugins), resultSize)
+	copy(result, stealthyPlugins)
 	result = append(result, bruteforceDetected...)
 
+	utils.DefaultLogger.Info(fmt.Sprintf("Hybrid scan completed. Total detected plugins: %d", len(result)))
 	return result
 }

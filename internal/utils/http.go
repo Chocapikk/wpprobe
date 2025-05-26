@@ -20,10 +20,13 @@
 package utils
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/corpix/uarand"
@@ -112,4 +115,30 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 	}
 
 	return string(data), nil
+}
+
+// NormalizeURL ensures the URL has the correct format (removes trailing slash)
+func NormalizeURL(url string) string {
+	// Remove trailing slash if present
+	url = strings.TrimSuffix(url, "/")
+
+	// Ensure URL has http:// or https:// prefix
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
+	}
+
+	return url
+}
+
+// SplitLines splits a byte array into lines
+func SplitLines(data []byte) []string {
+	var lines []string
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
