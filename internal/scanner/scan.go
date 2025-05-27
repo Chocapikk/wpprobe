@@ -245,7 +245,7 @@ func ScanSite(
 		opts.ScanMode = "stealthy"
 	}
 
-	if progress != nil {
+	if progress != nil && opts.File == "" {
 		progress.ClearLine()
 	}
 
@@ -272,7 +272,7 @@ func ScanSite(
 	}
 
 	if len(detected) == 0 {
-		if progress != nil {
+		if progress != nil && opts.File == "" {
 			progress.ClearLine()
 		}
 		if opts.File == "" {
@@ -357,7 +357,7 @@ func ScanSite(
 
 	wg.Wait()
 
-	if progress != nil {
+	if progress != nil && opts.File == "" {
 		progress.ClearLine()
 	}
 

@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	msgWidth = 40 // fixed width for progress messages
+	msgWidth = 50 // fixed width for progress messages
 )
 
 type ProgressManager struct {
