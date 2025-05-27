@@ -24,7 +24,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"encoding/json"
@@ -39,128 +38,66 @@ func CheckLatestVersion(currentVersion string) (string, bool) {
 	if err != nil {
 		return "unknown", false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var tags []struct {
 		Name string `json:"name"`
 	}
-
 	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
 		return "unknown", false
 	}
-
 	if len(tags) == 0 {
 		return "unknown", false
 	}
 
-	var latestVersion *semver.Version
+	var latest *semver.Version
 	for _, tag := range tags {
-		tagVersionStr := strings.TrimPrefix(tag.Name, "v")
-		tagVersion, err := semver.NewVersion(tagVersionStr)
-		if err != nil {
-			continue
-		}
-
-		if latestVersion == nil || tagVersion.Compare(latestVersion) > 0 {
-			latestVersion = tagVersion
+		vstr := strings.TrimPrefix(tag.Name, "v")
+		if v, err := semver.NewVersion(vstr); err == nil {
+			if latest == nil || v.Compare(latest) > 0 {
+				latest = v
+			}
 		}
 	}
-
-	if latestVersion == nil {
+	if latest == nil {
 		return "unknown", false
 	}
 
-	currentSemVer, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
+	curr, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
 	if err != nil {
-		return latestVersion.String(), false
+		return latest.String(), false
 	}
-
-	return latestVersion.String(), currentSemVer.Compare(latestVersion) >= 0
+	return latest.String(), curr.Compare(latest) >= 0
 }
 
-func GetPluginVersion(target, plugin string, threads int) string {
+func GetPluginVersion(target, plugin string, _ int) string {
 	httpClient := NewHTTPClient(10 * time.Second)
-	versionChan := make(chan string, 2)
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		if version := fetchVersionFromReadme(httpClient, target, plugin); version != "" {
-			versionChan <- version
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if version := fetchVersionFromStyle(httpClient, target, plugin); version != "" {
-			versionChan <- version
-		}
-	}()
-
-	go func() {
-		wg.Wait()
-		close(versionChan)
-	}()
-
-	for version := range versionChan {
-		return version
-	}
-
-	return "unknown"
+	return fetchVersionFromReadme(httpClient, target, plugin)
 }
 
 func fetchVersionFromReadme(client *HTTPClientManager, target, plugin string) string {
 	readmes := []string{"readme.txt", "Readme.txt", "README.txt"}
-	var version string
-
-	for _, readmeName := range readmes {
-		url := fmt.Sprintf("%s/wp-content/plugins/%s/%s", target, plugin, readmeName)
-		version = fetchVersionFromURL(client, url, `(?:Stable tag|Version):\s*([0-9a-zA-Z.-]+)`)
-		if version != "" {
-			break
+	for _, name := range readmes {
+		url := fmt.Sprintf("%s/wp-content/plugins/%s/%s", target, plugin, name)
+		if body, err := client.Get(url); err == nil {
+			re := regexp.MustCompile(`(?:Stable tag|Version):\s*([0-9A-Za-z.\-]+)`)
+			if m := re.FindStringSubmatch(body); len(m) > 1 {
+				return strings.TrimSpace(m[1])
+			}
 		}
 	}
-	return version
-}
-
-func fetchVersionFromStyle(client *HTTPClientManager, target, plugin string) string {
-	url := fmt.Sprintf("%s/wp-content/themes/%s/style.css", target, plugin)
-	return fetchVersionFromURL(client, url, `Version:\s*([0-9a-zA-Z.-]+)`)
-}
-
-func fetchVersionFromURL(client *HTTPClientManager, url, pattern string) string {
-	body, err := client.Get(url)
-	if err != nil {
-		return ""
-	}
-
-	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(body)
-	if len(matches) > 1 {
-		return strings.TrimSpace(matches[1])
-	}
-	return ""
+	return "unknown"
 }
 
 func IsVersionVulnerable(version, fromVersion, toVersion string) bool {
 	if version == "" || fromVersion == "" || toVersion == "" {
 		return false
 	}
-
-	v, err := semver.NewVersion(version)
-	if err != nil {
+	v, err1 := semver.NewVersion(version)
+	f, err2 := semver.NewVersion(fromVersion)
+	t, err3 := semver.NewVersion(toVersion)
+	if err1 != nil || err2 != nil || err3 != nil {
 		return false
 	}
-	from, err := semver.NewVersion(fromVersion)
-	if err != nil {
-		return false
-	}
-	to, err := semver.NewVersion(toVersion)
-	if err != nil {
-		return false
-	}
-
-	return v.Compare(from) >= 0 && v.Compare(to) <= 0
+	return v.Compare(f) >= 0 && v.Compare(t) <= 0
 }

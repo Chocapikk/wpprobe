@@ -64,7 +64,8 @@ func init() {
 	scanCmd.Flags().StringP("output", "o", "", "Output file to save results (csv, json)")
 	scanCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 	scanCmd.Flags().StringP("mode", "m", "stealthy", "Scan mode: stealthy, bruteforce, or hybrid")
-	scanCmd.Flags().StringP("plugin-list", "p", "", "Path to a custom plugin list file for bruteforce mode")
+	scanCmd.Flags().
+		StringP("plugin-list", "p", "", "Path to a custom plugin list file for bruteforce mode")
 }
 
 func mustBool(value bool, err error) bool {

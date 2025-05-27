@@ -226,8 +226,24 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 
 		detectedPlugins[pluginName] = true
 
-		if severity == "" || severity == "N/A" {
-			continue
+		if pr, ok := pluginResultsMap[pluginName]; !ok {
+			pluginResultsMap[pluginName] = &PluginResult{
+				Name: pluginName,
+				Versions: []VersionGroup{
+					{Version: version, Severities: []SeverityEntry{}},
+				},
+			}
+		} else {
+			exists := false
+			for i := range pr.Versions {
+				if pr.Versions[i].Version == version {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				pr.Versions = append(pr.Versions, VersionGroup{Version: version, Severities: []SeverityEntry{}})
+			}
 		}
 
 		if auth != "auth" && auth != "unauth" && auth != "privileged" {
@@ -386,7 +402,7 @@ func ReadLines(filename string) ([]string, error) {
 		DefaultLogger.Error("Failed to open file: " + err.Error())
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

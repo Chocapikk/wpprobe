@@ -103,6 +103,8 @@ wp-migrate-db-pro
 woocommerce-pdf-invoices-packing-slips
 woocommerce-checkout-field-editor
 gutenberg
+suretriggers
+depicter
 secupress
 wp-reset
 black-studio-tinymce-widget

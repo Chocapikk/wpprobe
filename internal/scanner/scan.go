@@ -41,7 +41,6 @@ type ScanOptions struct {
 
 func ScanTargets(opts ScanOptions) {
 	var targets []string
-
 	if opts.File != "" {
 		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
@@ -53,8 +52,7 @@ func ScanTargets(opts ScanOptions) {
 		targets = append(targets, opts.URL)
 	}
 
-	vulnerabilityData, _ := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
-
+	vulns, _ := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
 	siteThreads := int(math.Max(1, float64(opts.Threads)/float64(len(targets))))
 
 	var progress *utils.ProgressManager
@@ -71,27 +69,24 @@ func ScanTargets(opts ScanOptions) {
 	}
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, opts.Threads)
-
+	sem := make(chan struct{}, siteThreads)
 	for _, target := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(t string, scanThreads int) {
+		go func(t string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			defer func() { _ = recover() }()
 
-			localOpts := opts
-			localOpts.Threads = scanThreads
-
-			ScanSite(t, localOpts, writer, progress, vulnerabilityData)
+			local := opts
+			local.Threads = siteThreads
+			ScanSite(t, local, writer, progress, vulns)
 
 			if opts.File != "" && progress != nil {
 				progress.Increment()
 			}
-		}(target, siteThreads)
+		}(target)
 	}
-
 	wg.Wait()
 
 	if progress != nil {
@@ -99,19 +94,21 @@ func ScanTargets(opts ScanOptions) {
 	}
 }
 
-// performStealthyScan performs the original stealthy detection method using REST API endpoints
-func performStealthyScan(target string, opts ScanOptions, progress *utils.ProgressManager) ([]string, PluginDetectionResult) {
-	// Update progress message if available
+func performStealthyScan(
+	target string,
+	opts ScanOptions,
+	progress *utils.ProgressManager,
+) ([]string, PluginDetectionResult) {
 	if progress != nil && opts.File == "" {
 		progress.SetMessage("🔎 Scanning REST API endpoints...")
 	}
+
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
 		utils.DefaultLogger.Error("Failed to load scanned_plugins.json: " + err.Error())
 		return nil, PluginDetectionResult{}
 	}
-
-	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
+	endpointsData, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
 		utils.DefaultLogger.Error("Failed to parse scanned_plugins.json: " + err.Error())
 		return nil, PluginDetectionResult{}
@@ -125,126 +122,159 @@ func performStealthyScan(target string, opts ScanOptions, progress *utils.Progre
 		return nil, PluginDetectionResult{}
 	}
 
-	pluginResult := DetectPlugins(endpoints, pluginEndpoints)
-	if len(pluginResult.Detected) == 0 {
-		return nil, pluginResult
+	result := DetectPlugins(endpoints, endpointsData)
+	if len(result.Detected) == 0 {
+		return nil, result
 	}
-
-	return pluginResult.Detected, pluginResult
+	return result.Detected, result
 }
 
-// performBruteforceScan performs a brute-force detection method using a plugin list
-func performBruteforceScan(target string, opts ScanOptions, progress *utils.ProgressManager) ([]string, PluginDetectionResult) {
+func performBruteforceScan(
+	target string,
+	opts ScanOptions,
+	threads int,
+	parentProgress *utils.ProgressManager,
+) ([]string, PluginDetectionResult) {
 	plugins, err := LoadPluginsFromFile(opts.PluginList)
 	if err != nil {
 		utils.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
 		return nil, PluginDetectionResult{}
 	}
 
-	if progress != nil && opts.File == "" {
-		progress.SetTotal(len(plugins))
-		progress.SetMessage("🔎 Bruteforcing plugins...")
+	var pb *utils.ProgressManager
+	if parentProgress == nil {
+		pb = utils.NewProgressBar(len(plugins), "🔎 Bruteforcing plugins...")
+		defer pb.Finish()
+	} else {
+		pb = parentProgress
+		if opts.File == "" {
+			pb.SetTotal(len(plugins))
+			pb.SetMessage("🔎 Bruteforcing plugins...")
+		}
 	}
 
-	detected := BruteforcePlugins(target, plugins, opts.Threads, progress)
+	detected := BruteforcePlugins(target, plugins, threads, pb)
 
-	// Create a fake PluginDetectionResult for consistency with other scan methods
-	pluginResult := PluginDetectionResult{
-		Plugins:  make(map[string]*PluginData),
+	pr := PluginDetectionResult{
+		Plugins:  make(map[string]*PluginData, len(detected)),
 		Detected: detected,
 	}
-
-	for _, plugin := range detected {
-		pluginResult.Plugins[plugin] = &PluginData{
+	for _, p := range detected {
+		pr.Plugins[p] = &PluginData{
 			Score:      1,
 			Confidence: 100.0,
 			Ambiguous:  false,
 			Matches:    []string{},
 		}
 	}
-
-	return detected, pluginResult
+	return detected, pr
 }
 
-// performHybridScan performs a hybrid scan that first uses stealthy mode and then brute-force mode, skipping already found plugins
-func performHybridScan(target string, opts ScanOptions, progress *utils.ProgressManager) ([]string, PluginDetectionResult) {
+func performHybridScan(
+	target string,
+	opts ScanOptions,
+	threads int,
+	progress *utils.ProgressManager,
+) ([]string, PluginDetectionResult) {
 	utils.DefaultLogger.Info("Starting hybrid scan: first stealthy, then brute-force...")
 
-	// First perform stealthy scan
-	stealthyDetected, stealthyResult := performStealthyScan(target, opts, progress)
+	stealthyList, stealthyRes := performStealthyScan(target, opts, progress)
 
-	// If stealthy scan found nothing, just do a full brute-force scan
-	if len(stealthyDetected) == 0 {
-		return performBruteforceScan(target, opts, progress)
+	if len(stealthyList) == 0 {
+		return performBruteforceScan(target, opts, threads, progress)
 	}
 
-	// Get plugin list for brute-force
-	plugins, err := LoadPluginsFromFile(opts.PluginList)
+	if progress != nil {
+		progress.Finish()
+	}
+
+	allPlugins, err := LoadPluginsFromFile(opts.PluginList)
 	if err != nil {
 		utils.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
-		return stealthyDetected, stealthyResult
+		return stealthyList, stealthyRes
 	}
-
-	// Reset progress bar for brute-force phase
-	if progress != nil && opts.File == "" {
-		progress.SetTotal(len(plugins))
-		progress.SetMessage("🔎 Hybrid scan: bruteforcing remaining plugins...")
+	seen := make(map[string]bool, len(stealthyList))
+	for _, p := range stealthyList {
+		seen[p] = true
 	}
-
-	// Perform hybrid scan
-	allDetected := HybridScan(target, stealthyDetected, plugins, opts.Threads, progress)
-
-	// Update the plugin result to include all detected plugins
-	pluginResult := stealthyResult
-	for _, plugin := range allDetected {
-		if _, exists := pluginResult.Plugins[plugin]; !exists {
-			pluginResult.Plugins[plugin] = &PluginData{
-				Score:      1,
-				Confidence: 100.0,
-				Ambiguous:  false,
-				Matches:    []string{},
-			}
+	var remaining []string
+	for _, p := range allPlugins {
+		if !seen[p] {
+			remaining = append(remaining, p)
 		}
 	}
-	pluginResult.Detected = allDetected
 
-	return allDetected, pluginResult
+	var bruteBar *utils.ProgressManager
+	if opts.File == "" {
+		bruteBar = utils.NewProgressBar(len(remaining), "🔎 Bruteforcing remaining")
+	}
+
+	brutefound := BruteforcePlugins(target, remaining, threads, bruteBar)
+
+	if bruteBar != nil {
+		bruteBar.Finish()
+	}
+
+	combined := append([]string{}, stealthyList...)
+	combined = append(combined, brutefound...)
+
+	result := stealthyRes
+	for _, p := range brutefound {
+		result.Plugins[p] = &PluginData{
+			Score:      1,
+			Confidence: 100.0,
+			Ambiguous:  false,
+			Matches:    []string{},
+		}
+	}
+	result.Detected = combined
+
+	return combined, result
 }
 
+// ScanSite dispatches the chosen scan mode and displays results.
+// The heavy lifting for each mode is delegated to helper functions.
 func ScanSite(
 	target string,
 	opts ScanOptions,
 	writer utils.WriterInterface,
 	progress *utils.ProgressManager,
-	vulnerabilityData []wordfence.Vulnerability,
+	vulns []wordfence.Vulnerability,
 ) {
-	// Default to stealthy mode if not specified
 	if opts.ScanMode == "" {
 		opts.ScanMode = "stealthy"
 	}
 
-	var detectedPlugins []string
-	var pluginResult PluginDetectionResult
+	if progress != nil {
+		progress.ClearLine()
+	}
+
+	var (
+		detected []string
+		result   PluginDetectionResult
+	)
 
 	switch opts.ScanMode {
 	case "stealthy":
-		// Original stealthy detection method using REST API endpoints
-		detectedPlugins, pluginResult = performStealthyScan(target, opts, progress)
+		detected, result = performStealthyScan(target, opts, progress)
 
 	case "bruteforce":
-		// Brute-force detection method using plugin list
-		detectedPlugins, pluginResult = performBruteforceScan(target, opts, progress)
+		detected, result = performBruteforceScan(target, opts, opts.Threads, progress)
 
 	case "hybrid":
-		// Hybrid mode: first stealthy, then brute-force skipping already found plugins
-		detectedPlugins, pluginResult = performHybridScan(target, opts, progress)
+		detected, result = performHybridScan(target, opts, opts.Threads, progress)
 
 	default:
-		utils.DefaultLogger.Warning("Unknown scan mode '" + opts.ScanMode + "', defaulting to stealthy")
-		detectedPlugins, pluginResult = performStealthyScan(target, opts, progress)
+		utils.DefaultLogger.Warning(
+			"Unknown scan mode '" + opts.ScanMode + "', defaulting to stealthy",
+		)
+		detected, result = performStealthyScan(target, opts, progress)
 	}
 
-	if len(detectedPlugins) == 0 {
+	if len(detected) == 0 {
+		if progress != nil {
+			progress.ClearLine()
+		}
 		if opts.File == "" {
 			utils.DefaultLogger.Warning("No plugins detected on " + target)
 		}
@@ -254,42 +284,42 @@ func ScanSite(
 		return
 	}
 
-	results := make(map[string]string)
-	var resultsList []utils.PluginEntry
+	entriesMap := make(map[string]string, len(result.Detected))
+	var entriesList []utils.PluginEntry
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	sem := make(chan struct{}, opts.Threads)
 
-	totalTasks := len(pluginResult.Detected)
 	if progress != nil && opts.File == "" {
-		progress.SetTotal(totalTasks)
+		progress.SetTotal(len(result.Detected))
+		progress.SetMessage("🔎 Checking versions & vulnerabilities...")
 	}
 
-	for _, plugin := range pluginResult.Detected {
+	for _, plugin := range result.Detected {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(plugin string) {
+		go func(pl string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			defer func() { _ = recover() }()
 
-			var localResultsList []utils.PluginEntry
 			version := "unknown"
 			if !opts.NoCheckVersion {
-				version = utils.GetPluginVersion(target, plugin, opts.Threads)
+				version = utils.GetPluginVersion(target, pl, opts.Threads)
 			}
 
-			vulns := []wordfence.Vulnerability{}
-			for _, vuln := range vulnerabilityData {
-				if vuln.Slug == plugin &&
-					utils.IsVersionVulnerable(version, vuln.FromVersion, vuln.ToVersion) {
-					vulns = append(vulns, vuln)
+			var matched []wordfence.Vulnerability
+			for _, v := range vulns {
+				if v.Slug == pl && utils.IsVersionVulnerable(version, v.FromVersion, v.ToVersion) {
+					matched = append(matched, v)
 				}
 			}
 
-			if len(vulns) == 0 {
-				localResultsList = append(localResultsList, utils.PluginEntry{
-					Plugin:     plugin,
+			var local []utils.PluginEntry
+			if len(matched) == 0 {
+				local = append(local, utils.PluginEntry{
+					Plugin:     pl,
 					Version:    version,
 					Severity:   "N/A",
 					AuthType:   "N/A",
@@ -300,9 +330,9 @@ func ScanSite(
 					CVSSVector: "N/A",
 				})
 			} else {
-				for _, v := range vulns {
-					localResultsList = append(localResultsList, utils.PluginEntry{
-						Plugin:     plugin,
+				for _, v := range matched {
+					local = append(local, utils.PluginEntry{
+						Plugin:     pl,
 						Version:    version,
 						Severity:   v.Severity,
 						AuthType:   v.AuthType,
@@ -316,9 +346,8 @@ func ScanSite(
 			}
 
 			mu.Lock()
-			results[plugin] = version
-			resultsList = append(resultsList, localResultsList...)
-
+			entriesMap[pl] = version
+			entriesList = append(entriesList, local...)
 			if progress != nil && opts.File == "" {
 				progress.Increment()
 			}
@@ -328,9 +357,12 @@ func ScanSite(
 
 	wg.Wait()
 
-	if writer != nil {
-		writer.WriteResults(target, resultsList)
+	if progress != nil {
+		progress.ClearLine()
 	}
 
-	DisplayResults(target, results, pluginResult, resultsList, opts, progress)
+	if writer != nil {
+		writer.WriteResults(target, entriesList)
+	}
+	DisplayResults(target, entriesMap, result, entriesList, opts, progress)
 }

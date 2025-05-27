@@ -78,7 +78,7 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 	if err != nil {
 		return "", errors.New("request failed: " + err.Error())
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	redirects := 0
 	for resp.StatusCode >= 300 && resp.StatusCode < 400 {

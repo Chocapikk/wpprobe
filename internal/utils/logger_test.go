@@ -105,8 +105,8 @@ func TestLogger_PrintBanner(t *testing.T) {
 	version := "v1.0.0"
 	isLatest := true
 	DefaultLogger.PrintBanner(version, isLatest)
+	defer func() { _ = w.Close() }()
 
-	w.Close()
 	var outBuf bytes.Buffer
 	_, _ = outBuf.ReadFrom(r)
 	os.Stdout = originalStdout
@@ -122,7 +122,7 @@ func TestLogger_PrintBanner(t *testing.T) {
 
 	DefaultLogger.PrintBanner(version, false)
 
-	w.Close()
+	defer func() { _ = w.Close() }()
 	outBuf.Reset()
 	_, _ = outBuf.ReadFrom(r)
 	os.Stdout = originalStdout

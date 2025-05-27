@@ -82,7 +82,7 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -243,7 +243,7 @@ func saveVulnerabilitiesToFile(vulnerabilities []Vulnerability) error {
 		utils.DefaultLogger.Error("Error saving file: " + err.Error())
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
