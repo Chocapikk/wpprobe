@@ -52,15 +52,15 @@ Unlike traditional scanners that hammer websites with requests, WPProbe takes a 
 
 ## ⚙️ Features  
 
-✅ **Multiple scanning modes**:
+- ✅ **Multiple scanning modes**:
    - **Stealthy mode** – Uses REST API to detect plugins with minimal footprint
    - **Brute-force mode** – Comprehensive plugin detection using direct requests
    - **Hybrid mode** – Starts with stealthy scanning then uses brute-force only for remaining plugins
-✅ **High-speed scanning** – Multithreaded scanning with a sleek progress bar.  
-✅ **Vulnerability mapping** – Automatically associates detected plugins with known CVEs.  
-✅ **Multiple output formats** – Save results in **CSV** or **JSON**.  
-✅ **Resilient scanning** – Handles sites with missing version info gracefully.  
-✅ **Optimized detection** – Intelligently combines methods to maximize plugin discovery.
+- ✅ **High-speed scanning** – Multithreaded scanning with a sleek progress bar.  
+- ✅ **Vulnerability mapping** – Automatically associates detected plugins with known CVEs.  
+- ✅ **Multiple output formats** – Save results in **CSV** or **JSON**.  
+- ✅ **Resilient scanning** – Handles sites with missing version info gracefully.  
+- ✅ **Optimized detection** – Intelligently combines methods to maximize plugin discovery.
 
 ---
 
