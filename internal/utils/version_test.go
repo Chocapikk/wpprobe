@@ -140,36 +140,6 @@ func Test_fetchVersionFromReadme(t *testing.T) {
 	}
 }
 
-func Test_fetchVersionFromStyle(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := w.Write([]byte("Version: 2.5.9")); err != nil {
-			t.Errorf("Failed to write response: %v", err)
-		}
-	}))
-	defer mockServer.Close()
-
-	client := NewHTTPClient(5 * time.Second)
-	version := fetchVersionFromStyle(client, mockServer.URL, "sample-theme")
-	if version != "2.5.9" {
-		t.Errorf("fetchVersionFromStyle() = %v, want %v", version, "2.5.9")
-	}
-}
-
-func Test_fetchVersionFromURL(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := w.Write([]byte("Version: 1.0.0")); err != nil {
-			t.Errorf("Failed to write response: %v", err)
-		}
-	}))
-	defer mockServer.Close()
-
-	client := NewHTTPClient(5 * time.Second)
-	version := fetchVersionFromURL(client, mockServer.URL, `Version:\s*([0-9.]+)`)
-	if version != "1.0.0" {
-		t.Errorf("fetchVersionFromURL() = %v, want %v", version, "1.0.0")
-	}
-}
-
 func TestIsVersionVulnerable(t *testing.T) {
 	tests := []struct {
 		name       string

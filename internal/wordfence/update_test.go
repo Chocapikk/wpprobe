@@ -38,8 +38,7 @@ func TestUpdateWordfence(t *testing.T) {
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		t.Errorf("Expected file %s to be created", outputPath)
 	}
-
-	os.Remove(outputPath)
+	defer func() { _ = os.Remove(outputPath) }()
 }
 
 func Test_processWordfenceData(t *testing.T) {
@@ -112,7 +111,7 @@ func Test_saveVulnerabilitiesToFile(t *testing.T) {
 		t.Errorf("Expected file %s to be created", outputPath)
 	}
 
-	os.Remove(outputPath)
+	defer func() { _ = os.Remove(outputPath) }()
 }
 
 func Test_LoadVulnerabilities(t *testing.T) {
@@ -134,7 +133,7 @@ func Test_LoadVulnerabilities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create file: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if err := json.NewEncoder(file).Encode(vulnerabilities); err != nil {
 		t.Fatalf("Failed to encode vulnerabilities: %v", err)
@@ -177,7 +176,7 @@ func TestGetVulnerabilitiesForPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create file: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if err := json.NewEncoder(file).Encode(vulnerabilities); err != nil {
 		t.Fatalf("Failed to encode vulnerabilities: %v", err)

@@ -24,6 +24,8 @@ import (
 )
 
 //go:embed files/scanned_plugins.json
+//go:embed files/wordpress_plugins.txt
+
 var embeddedFiles embed.FS
 
 func GetEmbeddedFile(filename string) ([]byte, error) {

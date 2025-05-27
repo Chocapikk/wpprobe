@@ -34,7 +34,7 @@ func TestNewCSVWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	writer := NewCSVWriter(tmpFile.Name())
 	if writer == nil {
@@ -53,7 +53,7 @@ func TestCSVWriter_WriteResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	writer := NewCSVWriter(tmpFile.Name())
 	defer writer.Close()
@@ -79,7 +79,7 @@ func TestCSVWriter_WriteResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open CSV: %v", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	r := csv.NewReader(file)
 	records, err := r.ReadAll()
@@ -107,7 +107,7 @@ func TestNewJSONWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	writer := NewJSONWriter(tmpFile.Name())
 	if writer == nil {
@@ -126,7 +126,7 @@ func TestJSONWriter_WriteResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	writer := NewJSONWriter(tmpFile.Name())
 	defer writer.Close()
@@ -180,7 +180,7 @@ func TestGetWriter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			writer := GetWriter(tt.outputFile)
-			defer os.Remove(tt.outputFile)
+			defer func() { _ = os.Remove(tt.outputFile) }()
 
 			if reflect.TypeOf(writer).String() != tt.wantType {
 				t.Errorf("GetWriter() = %T, want %s", writer, tt.wantType)
@@ -217,13 +217,13 @@ func TestReadLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	content := "line1\nline2\nline3"
 	if _, err := tmpFile.WriteString(content); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	lines, err := ReadLines(tmpFile.Name())
 	if err != nil {
@@ -244,7 +244,7 @@ func TestGetStoragePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStoragePath() error = %v", err)
 	}
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	t.Logf("Generated storage path: %s", path)
 

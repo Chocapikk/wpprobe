@@ -45,7 +45,7 @@ func TestExecute(t *testing.T) {
 
 			go func() {
 				Execute()
-				w.Close()
+				_ = w.Close()
 			}()
 
 			var buf bytes.Buffer

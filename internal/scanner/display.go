@@ -206,41 +206,45 @@ func DisplayResults(
 	for _, plugin := range sortedPluginsByConfidence(detected, pluginRes.Plugins, pv.Plugins) {
 		version := detected[plugin]
 		conf := pluginRes.Plugins[plugin].Confidence
-		label := formatPluginLabel(plugin, version, conf, pluginRes.Plugins[plugin].Ambiguous)
+		ambiguous := pluginRes.Plugins[plugin].Ambiguous
+		label := formatPluginLabel(plugin, version, conf, ambiguous)
 
 		vulnCat, ok := pv.Plugins[plugin]
 		plNode := tree.Root(getPluginColor(version, vulnCat, ok).Render(label))
 
-		authGroups, hasAG := pa.Plugins[plugin]
-		if hasAG {
+		if authGroups, hasAG := pa.Plugins[plugin]; hasAG {
 			for _, sev := range vTypes {
-				sGrp, sOk := authGroups.Severities[sev]
-				if !sOk {
-					continue
-				}
-				sevNode := tree.Root(vStyles[sev].Render(sev))
-				for _, key := range []string{"unauth", "auth", "privileged", "unknown"} {
-					cves, cOk := sGrp.AuthTypes[key]
-					if !cOk || len(cves) == 0 {
-						continue
-					}
-					authNode := tree.Root(authLabel(key))
-					for i := 0; i < len(cves); i += 4 {
-						end := i + 4
-						if end > len(cves) {
-							end = len(cves)
+				if sGrp, sOk := authGroups.Severities[sev]; sOk {
+					sevNode := tree.Root(vStyles[sev].Render(sev))
+					for _, key := range []string{"unauth", "auth", "privileged", "unknown"} {
+						if cves, cOk := sGrp.AuthTypes[key]; cOk && len(cves) > 0 {
+							authNode := tree.Root(authLabel(key))
+							for i := 0; i < len(cves); i += 4 {
+								end := i + 4
+								if end > len(cves) {
+									end = len(cves)
+								}
+								authNode.Child(strings.Join(cves[i:end], " ⋅ "))
+							}
+							sevNode.Child(authNode)
 						}
-						authNode.Child(strings.Join(cves[i:end], " ⋅ "))
 					}
-					sevNode.Child(authNode)
+					plNode.Child(sevNode)
 				}
-				plNode.Child(sevNode)
 			}
 		}
+
 		root.Child(plNode)
 	}
 
-	if len(pluginRes.Detected) > 0 {
+	showWarning := false
+	for _, pr := range pluginRes.Plugins {
+		if len(pr.Matches) > 0 {
+			showWarning = true
+			break
+		}
+	}
+	if showWarning {
 		root.Child(
 			tree.Root(
 				"⚠️ indicates that multiple plugins share common endpoints; only one of these is likely active.",
@@ -250,7 +254,7 @@ func DisplayResults(
 
 	out := separatorStyle.Render(root.String())
 	if progress != nil {
-		progress.Bprintln(out)
+		_, _ = progress.Bprintln(out)
 	} else {
 		fmt.Println(out)
 	}

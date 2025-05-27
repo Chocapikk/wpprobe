@@ -42,7 +42,7 @@ func createTempFile(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 	return tmpFile.Name()
 }
 

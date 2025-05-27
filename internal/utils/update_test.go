@@ -111,31 +111,34 @@ func Test_getLatestVersion_Error(t *testing.T) {
 
 func TestAutoUpdate(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/repos/Chocapikk/wpprobe/releases/latest" {
+		switch r.URL.Path {
+		case "/repos/Chocapikk/wpprobe/releases/latest":
 			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(map[string]string{"tag_name": "v1.0.0"}); err != nil {
-				t.Errorf("Failed to encode JSON response: %v", err)
+				t.Errorf("failed to encode JSON response: %v", err)
 			}
-		} else if r.URL.Path == "/download" {
+		case "/download":
 			w.WriteHeader(http.StatusOK)
 			if _, err := w.Write([]byte("binary data")); err != nil {
-				t.Errorf("Failed to write binary data: %v", err)
+				t.Errorf("failed to write binary data: %v", err)
 			}
-		} else {
+		default:
 			http.NotFound(w, r)
 		}
 	}))
-	defer mockServer.Close()
+	defer func() { mockServer.Close() }()
 
-	originalGitHubLatestReleaseURL := GitHubLatestReleaseURL
-	originalGitHubDownloadURL := GitHubDownloadURL
+	originalGitHubLatest := GitHubLatestReleaseURL
+	originalGitHubDownload := GitHubDownloadURL
 	defer func() {
-		GitHubLatestReleaseURL = originalGitHubLatestReleaseURL
-		GitHubDownloadURL = originalGitHubDownloadURL
+		GitHubLatestReleaseURL = originalGitHubLatest
+		GitHubDownloadURL = originalGitHubDownload
 	}()
 
-	GitHubLatestReleaseURL = func() string { return mockServer.URL + "/repos/Chocapikk/wpprobe/releases/latest" }
-	GitHubDownloadURL = func(version, osName, arch string) string {
+	GitHubLatestReleaseURL = func() string {
+		return mockServer.URL + "/repos/Chocapikk/wpprobe/releases/latest"
+	}
+	GitHubDownloadURL = func(version, os, arch string) string {
 		return mockServer.URL + "/download"
 	}
 
@@ -148,21 +151,26 @@ func TestAutoUpdate(t *testing.T) {
 
 	tmpFile, err := os.CreateTemp("", "wpprobe_test_*")
 	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
+		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() {
+		if err := tmpFile.Close(); err != nil {
+			t.Errorf("failed to close temp file: %v", err)
+		}
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			t.Errorf("failed to remove temp file: %v", err)
+		}
+	}()
 
-	originalExe := os.Args[0]
+	originalArg0 := os.Args[0]
 	os.Args[0] = tmpFile.Name()
-	defer func() { os.Args[0] = originalExe }()
+	defer func() { os.Args[0] = originalArg0 }()
 
-	err = AutoUpdate()
-	if err != nil {
+	if err := AutoUpdate(); err != nil {
 		t.Errorf("AutoUpdate() error = %v, want nil", err)
 	}
-
 	if !exitCalled {
-		t.Errorf("Expected exitFunc to be called, but it wasn't")
+		t.Error("expected exitFunc to be called, but it wasn't")
 	}
 }
 
