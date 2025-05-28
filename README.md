@@ -33,7 +33,7 @@ Unlike traditional scanners that hammer websites with requests, WPProbe takes a 
 🔥 **This means fewer requests, faster scans, and a lower chance of getting blocked by WAFs or security plugins!**  
 
 ### Brute-Force Mode
-1️⃣ **Load** a comprehensive list of WordPress plugins (600+ common plugins by default).  
+1️⃣ **Load** a comprehensive list of WordPress plugins (10k+ common plugins by default).  
 2️⃣ **Check** for the existence of each plugin by directly requesting its directory.  
 3️⃣ **Detect** plugins based on HTTP response codes (non-404 responses indicate plugin exists).  
 4️⃣ **Retrieve** versions and check for vulnerabilities as in stealthy mode.  
