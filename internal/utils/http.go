@@ -41,9 +41,10 @@ const maxRedirects = 10
 type HTTPClientManager struct {
 	client    *http.Client
 	userAgent string
+	headers   []string
 }
 
-func NewHTTPClient(timeout time.Duration) *HTTPClientManager {
+func NewHTTPClient(timeout time.Duration, headers []string) *HTTPClientManager {
 	transport := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true,
@@ -63,6 +64,7 @@ func NewHTTPClient(timeout time.Duration) *HTTPClientManager {
 	return &HTTPClientManager{
 		client:    client,
 		userAgent: uarand.GetRandom(),
+		headers:   headers,
 	}
 }
 
@@ -72,7 +74,35 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 		return "", errors.New("failed to create request: " + err.Error())
 	}
 
-	req.Header.Set("User-Agent", h.userAgent)
+	hasUA := false
+	for _, hdr := range h.headers {
+		parts := strings.SplitN(hdr, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		if strings.EqualFold(key, "User-Agent") {
+			req.Header.Add("User-Agent", strings.TrimSpace(parts[1]))
+			hasUA = true
+		}
+	}
+
+	if !hasUA {
+		req.Header.Set("User-Agent", h.userAgent)
+	}
+
+	for _, hdr := range h.headers {
+		parts := strings.SplitN(hdr, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		if strings.EqualFold(key, "User-Agent") {
+			continue
+		}
+		value := strings.TrimSpace(parts[1])
+		req.Header.Add(key, value)
+	}
 
 	resp, err := h.client.Do(req)
 	if err != nil {
@@ -117,20 +147,14 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 	return string(data), nil
 }
 
-// NormalizeURL ensures the URL has the correct format (removes trailing slash)
 func NormalizeURL(url string) string {
-	// Remove trailing slash if present
 	url = strings.TrimSuffix(url, "/")
-
-	// Ensure URL has http:// or https:// prefix
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		url = "https://" + url
 	}
-
 	return url
 }
 
-// SplitLines splits a byte array into lines
 func SplitLines(data []byte) []string {
 	var lines []string
 	scanner := bufio.NewScanner(bytes.NewReader(data))

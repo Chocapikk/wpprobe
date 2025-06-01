@@ -31,13 +31,17 @@ import (
 func TestFetchEndpoints(t *testing.T) {
 	tests := []struct {
 		name       string
-		target     string
 		mockServer func(w http.ResponseWriter, r *http.Request)
+		headers    []string
 		want       []string
 	}{
 		{
-			name: "Valid response with routes",
+			name: "Valid response with routes and header present",
 			mockServer: func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("X-Test") != "value" {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
 				response := map[string]interface{}{
 					"routes": map[string]interface{}{
 						"/wp/v2/posts":      nil,
@@ -45,39 +49,53 @@ func TestFetchEndpoints(t *testing.T) {
 						"/wp/v2/categories": nil,
 					},
 				}
-				if err := json.NewEncoder(w).Encode(response); err != nil {
-					t.Errorf("Failed to encode JSON response: %v", err)
-				}
+				_ = json.NewEncoder(w).Encode(response)
 			},
-			want: []string{"/wp/v2/posts", "/wp/v2/comments", "/wp/v2/categories"},
+			headers: []string{"X-Test: value"},
+			want:    []string{"/wp/v2/posts", "/wp/v2/comments", "/wp/v2/categories"},
+		},
+		{
+			name: "Valid response with routes but header missing",
+			mockServer: func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("X-Test") == "" {
+					response := map[string]interface{}{
+						"routes": map[string]interface{}{
+							"/wp/v2/posts": nil,
+						},
+					}
+					_ = json.NewEncoder(w).Encode(response)
+					return
+				}
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			headers: nil,
+			want:    []string{"/wp/v2/posts"},
 		},
 		{
 			name: "Response without routes",
 			mockServer: func(w http.ResponseWriter, r *http.Request) {
-				response := map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"data": "No routes here",
-				}
-				if err := json.NewEncoder(w).Encode(response); err != nil {
-					t.Errorf("Failed to encode JSON response: %v", err)
-				}
+				})
 			},
-			want: []string{},
+			headers: nil,
+			want:    []string{},
 		},
 		{
 			name: "Invalid JSON response",
 			mockServer: func(w http.ResponseWriter, r *http.Request) {
-				if _, err := w.Write([]byte("{invalid-json")); err != nil {
-					t.Errorf("Failed to write invalid JSON: %v", err)
-				}
+				_, _ = w.Write([]byte("{invalid-json"))
 			},
-			want: []string{},
+			headers: nil,
+			want:    []string{},
 		},
 		{
 			name: "HTTP error response",
 			mockServer: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			},
-			want: []string{},
+			headers: nil,
+			want:    []string{},
 		},
 	}
 
@@ -86,7 +104,7 @@ func TestFetchEndpoints(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(tt.mockServer))
 			defer server.Close()
 
-			got := FetchEndpoints(server.URL)
+			got := FetchEndpoints(server.URL, tt.headers)
 
 			sort.Strings(got)
 			sort.Strings(tt.want)

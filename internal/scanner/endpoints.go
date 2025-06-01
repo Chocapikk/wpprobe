@@ -51,8 +51,8 @@ func fetchEndpointsFromPath(target, path string, httpClient *utils.HTTPClientMan
 	return endpoints
 }
 
-func FetchEndpoints(target string) []string {
-	httpClient := utils.NewHTTPClient(10 * time.Second)
+func FetchEndpoints(target string, headers []string) []string {
+	httpClient := utils.NewHTTPClient(10*time.Second, headers)
 
 	endpointsChan := make(chan []string, 2)
 	var wg sync.WaitGroup

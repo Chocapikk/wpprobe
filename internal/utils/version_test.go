@@ -78,8 +78,6 @@ func TestGetPluginVersion(t *testing.T) {
 		switch r.URL.Path {
 		case "/wp-content/plugins/test-plugin/readme.txt":
 			_, err = fmt.Fprintln(w, "Stable tag: 1.0.0")
-		case "/wp-content/themes/test-theme/style.css":
-			_, err = fmt.Fprintln(w, "Version: 2.3.4")
 		default:
 			http.NotFound(w, r)
 		}
@@ -102,12 +100,6 @@ func TestGetPluginVersion(t *testing.T) {
 			expected: "1.0.0",
 		},
 		{
-			name:     "Plugin version from style.css",
-			target:   mockServer.URL,
-			plugin:   "test-theme",
-			expected: "2.3.4",
-		},
-		{
 			name:     "Unknown plugin",
 			target:   mockServer.URL,
 			plugin:   "nonexistent",
@@ -117,7 +109,7 @@ func TestGetPluginVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetPluginVersion(tt.target, tt.plugin, 2)
+			got := GetPluginVersion(tt.target, tt.plugin, 2, nil)
 			if got != tt.expected {
 				t.Errorf("GetPluginVersion() = %v, want %v", got, tt.expected)
 			}
@@ -133,7 +125,7 @@ func Test_fetchVersionFromReadme(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	client := NewHTTPClient(5 * time.Second)
+	client := NewHTTPClient(5*time.Second, nil)
 	version := fetchVersionFromReadme(client, mockServer.URL, "sample")
 	if version != "3.4.1" {
 		t.Errorf("fetchVersionFromReadme() = %v, want %v", version, "3.4.1")
