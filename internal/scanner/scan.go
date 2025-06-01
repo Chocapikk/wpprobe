@@ -37,6 +37,7 @@ type ScanOptions struct {
 	Verbose        bool
 	ScanMode       string
 	PluginList     string
+	Headers        []string
 }
 
 func ScanTargets(opts ScanOptions) {
@@ -114,7 +115,7 @@ func performStealthyScan(
 		return nil, PluginDetectionResult{}
 	}
 
-	endpoints := FetchEndpoints(target)
+	endpoints := FetchEndpoints(target, opts.Headers)
 	if len(endpoints) == 0 {
 		if opts.File == "" {
 			utils.DefaultLogger.Warning("No REST endpoints found on " + target)
@@ -153,7 +154,7 @@ func performBruteforceScan(
 		}
 	}
 
-	detected := BruteforcePlugins(target, plugins, threads, pb)
+	detected := BruteforcePlugins(target, plugins, threads, pb, opts.Headers)
 
 	pr := PluginDetectionResult{
 		Plugins:  make(map[string]*PluginData, len(detected)),
@@ -209,7 +210,7 @@ func performHybridScan(
 		bruteBar = utils.NewProgressBar(len(remaining), "🔎 Bruteforcing remaining")
 	}
 
-	brutefound := BruteforcePlugins(target, remaining, threads, bruteBar)
+	brutefound := BruteforcePlugins(target, remaining, threads, bruteBar, opts.Headers)
 
 	if bruteBar != nil {
 		bruteBar.Finish()
@@ -306,7 +307,7 @@ func ScanSite(
 
 			version := "unknown"
 			if !opts.NoCheckVersion {
-				version = utils.GetPluginVersion(target, pl, opts.Threads)
+				version = utils.GetPluginVersion(target, pl, opts.Threads, opts.Headers)
 			}
 
 			var matched []wordfence.Vulnerability

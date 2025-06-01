@@ -35,6 +35,8 @@ var scanCmd = &cobra.Command{
 		outputFile := cmd.Flag("output").Value.String()
 		outputFormat := utils.DetectOutputFormat(outputFile)
 
+		headers, _ := cmd.Flags().GetStringArray("header")
+
 		opts := scanner.ScanOptions{
 			URL:            cmd.Flag("url").Value.String(),
 			File:           cmd.Flag("file").Value.String(),
@@ -45,6 +47,7 @@ var scanCmd = &cobra.Command{
 			Verbose:        mustBool(cmd.Flags().GetBool("verbose")),
 			ScanMode:       cmd.Flag("mode").Value.String(),
 			PluginList:     cmd.Flag("plugin-list").Value.String(),
+			Headers:        headers,
 		}
 
 		if opts.URL == "" && opts.File == "" {
@@ -66,6 +69,8 @@ func init() {
 	scanCmd.Flags().StringP("mode", "m", "stealthy", "Scan mode: stealthy, bruteforce, or hybrid")
 	scanCmd.Flags().
 		StringP("plugin-list", "p", "", "Path to a custom plugin list file for bruteforce mode")
+	scanCmd.Flags().
+		StringArrayP("header", "H", []string{}, "HTTP header to include in requests. Can be specified multiple times.")
 }
 
 func mustBool(value bool, err error) bool {
