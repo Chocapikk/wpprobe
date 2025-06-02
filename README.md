@@ -277,6 +277,18 @@ http://localhost:5555,woocommerce,9.6.0,,,,,,,No vulnerabilities found
 
 ---
 
+## 📈 Stats
+
+<a href="https://star-history.com/#Chocapikk/wpprobe&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Chocapikk/wpprobe&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Chocapikk/wpprobe&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Chocapikk/wpprobe&type=Date" />
+  </picture>
+</a>
+
+---
+
 ## ✨ Credits  
 
 Developed by **@Chocapikk** 🍫, inspired by modern recon methodologies and the **REST API enumeration trick**.  
