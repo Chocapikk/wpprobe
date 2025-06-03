@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"fmt"
 	"math"
 	"sync"
 
@@ -101,6 +102,15 @@ func performStealthyScan(
 	progress *utils.ProgressManager,
 ) ([]string, PluginDetectionResult) {
 	if progress != nil && opts.File == "" {
+		progress.SetMessage("🔎 Discovering plugins from HTML...")
+	}
+
+	htmlSlugs, err := discoverPluginsFromHTML(target, opts.Headers)
+	if err != nil {
+		utils.DefaultLogger.Warning(fmt.Sprintf("HTML discovery failed on %s: %v", target, err))
+	}
+
+	if progress != nil && opts.File == "" {
 		progress.SetMessage("🔎 Scanning REST API endpoints...")
 	}
 
@@ -116,14 +126,29 @@ func performStealthyScan(
 	}
 
 	endpoints := FetchEndpoints(target, opts.Headers)
-	if len(endpoints) == 0 {
-		if opts.File == "" {
-			utils.DefaultLogger.Warning("No REST endpoints found on " + target)
+
+	var result PluginDetectionResult
+	if len(endpoints) > 0 {
+		result = DetectPlugins(endpoints, endpointsData)
+	} else {
+		result = PluginDetectionResult{
+			Plugins:  make(map[string]*PluginData),
+			Detected: nil,
 		}
-		return nil, PluginDetectionResult{}
 	}
 
-	result := DetectPlugins(endpoints, endpointsData)
+	for _, slug := range htmlSlugs {
+		if _, exists := result.Plugins[slug]; !exists {
+			result.Plugins[slug] = &PluginData{
+				Score:      1,
+				Confidence: 50.0,
+				Ambiguous:  false,
+				Matches:    nil,
+			}
+			result.Detected = append(result.Detected, slug)
+		}
+	}
+
 	if len(result.Detected) == 0 {
 		return nil, result
 	}
