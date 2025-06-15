@@ -54,6 +54,21 @@ var (
 	unknownStyle    = bold.Foreground(lipgloss.Color("#FFA500"))
 )
 
+var (
+	TitleStyle     = titleStyle
+	URLStyle       = urlStyle
+	SeparatorStyle = separatorStyle
+	CriticalStyle  = criticalStyle
+	HighStyle      = highStyle
+	MediumStyle    = mediumStyle
+	LowStyle       = lowStyle
+	UnknownStyle   = unknownStyle
+
+	UnauthStyle     = unauthStyle
+	AuthStyle       = authStyle
+	PrivilegedStyle = privilegedStyle
+)
+
 type VulnCategories struct {
 	Critical []string
 	High     []string

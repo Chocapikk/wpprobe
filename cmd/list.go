@@ -20,50 +20,16 @@
 package cmd
 
 import (
-	"os"
-
-	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/list"
 	"github.com/spf13/cobra"
 )
 
-var version = "dev"
-
-var rootCmd = &cobra.Command{
-	Use:     "wpprobe",
-	Short:   "A fast WordPress plugin enumeration tool",
-	Long:    `WPProbe is a high-speed WordPress plugin scanner that detects installed plugins and checks for known vulnerabilities using the Wordfence database.`,
-	Version: version,
-}
-
-func Execute() {
-	_, isLatest := utils.CheckLatestVersion(version)
-	utils.DefaultLogger.PrintBanner(version, isLatest)
-
-	if err := rootCmd.Execute(); err != nil {
-		utils.DefaultLogger.Error(err.Error())
-		os.Exit(1)
-	}
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Show how many CVEs wpprobe can detect, split by severity",
+	RunE:  func(cmd *cobra.Command, args []string) error { return list.RunList() },
 }
 
 func init() {
-	rootCmd.AddCommand(scanCmd)
-	rootCmd.AddCommand(updateCmd)
-	rootCmd.AddCommand(updateDbCmd)
-
-	rootCmd.SetVersionTemplate("WPProbe version {{.Version}}\n")
-
-	rootCmd.SilenceErrors = true
-
-	cobra.OnInitialize(func() {
-		rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-			utils.DefaultLogger.Error(err.Error())
-			return err
-		})
-		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-			if cmd.Parent() == nil {
-				utils.DefaultLogger.Error("Unknown command: " + cmd.Name())
-			}
-			return nil
-		}
-	})
+	rootCmd.AddCommand(listCmd)
 }
