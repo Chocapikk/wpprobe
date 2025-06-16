@@ -20,8 +20,8 @@
 package scanner
 
 import (
-	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,17 +30,17 @@ import (
 )
 
 func discoverPluginsFromHTML(target string, headers []string) ([]string, error) {
-	normalized := utils.NormalizeURL(target) + "/"
-
+	normalized := utils.NormalizeURL(target)
 	client := utils.NewHTTPClient(10*time.Second, headers)
-	htmlContent, err := client.Get(normalized)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch homepage %s: %w", normalized, err)
-	}
 
 	slugsSet := make(map[string]struct{})
-	if err := extractSlugsFromReader(strings.NewReader(htmlContent), slugsSet); err != nil {
-		return nil, fmt.Errorf("failed to parse HTML %s: %w", normalized, err)
+
+	if body, err := client.Get(normalized + "/"); err == nil {
+		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
+	}
+
+	if body, err := client.Get(normalized + "/wp-content/uploads/"); err == nil {
+		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
 	}
 
 	var slugs []string
@@ -51,31 +51,34 @@ func discoverPluginsFromHTML(target string, headers []string) ([]string, error) 
 }
 
 func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
-	z := html.NewTokenizer(r)
+	var slugPattern = regexp.MustCompile(`(?i)^[a-z][a-z0-9_-]*$`)
 
+	z := html.NewTokenizer(r)
 	for {
 		tt := z.Next()
-		switch tt {
-		case html.ErrorToken:
+		if tt == html.ErrorToken {
 			if z.Err() == io.EOF {
 				return nil
 			}
 			return z.Err()
+		}
+		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
+			continue
+		}
 
-		case html.StartTagToken, html.SelfClosingTagToken:
-			t := z.Token()
-			for _, attr := range t.Attr {
-				val := strings.TrimSpace(attr.Val)
-				if val == "" {
-					continue
-				}
-				if attr.Key == "href" || attr.Key == "src" {
-					if idx := strings.Index(val, "/wp-content/plugins/"); idx != -1 {
-						rest := val[idx+len("/wp-content/plugins/"):]
-						parts := strings.SplitN(rest, "/", 2)
-						if len(parts) > 0 && parts[0] != "" {
-							dest[parts[0]] = struct{}{}
-						}
+		tok := z.Token()
+		for _, attr := range tok.Attr {
+			val := strings.TrimSpace(attr.Val)
+			if val == "" {
+				continue
+			}
+			parts := strings.Split(val, "/")
+			for i := 0; i < len(parts)-2; i++ {
+				if parts[i] == "wp-content" &&
+					(parts[i+1] == "plugins" || parts[i+1] == "uploads") {
+					slug := parts[i+2]
+					if slugPattern.MatchString(slug) {
+						dest[slug] = struct{}{}
 					}
 				}
 			}
