@@ -26,18 +26,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "dev"
-
 var rootCmd = &cobra.Command{
 	Use:     "wpprobe",
 	Short:   "A fast WordPress plugin enumeration tool",
 	Long:    `WPProbe is a high-speed WordPress plugin scanner that detects installed plugins and checks for known vulnerabilities using the Wordfence database.`,
-	Version: version,
+	Version: utils.Version,
 }
 
 func Execute() {
-	_, isLatest := utils.CheckLatestVersion(version)
-	utils.DefaultLogger.PrintBanner(version, isLatest)
+	_, isLatest := utils.CheckLatestVersion(utils.Version)
+	utils.DefaultLogger.PrintBanner(utils.Version, isLatest)
 
 	if err := rootCmd.Execute(); err != nil {
 		utils.DefaultLogger.Error(err.Error())
@@ -50,7 +48,7 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(updateDbCmd)
 
-	rootCmd.SetVersionTemplate("WPProbe version {{.Version}}\n")
+	rootCmd.SetVersionTemplate("WPProbe version {{.utils.Version}}\n")
 
 	rootCmd.SilenceErrors = true
 

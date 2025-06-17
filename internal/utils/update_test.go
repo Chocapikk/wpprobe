@@ -126,7 +126,7 @@ func TestAutoUpdate(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer func() { mockServer.Close() }()
+	defer mockServer.Close()
 
 	originalGitHubLatest := GitHubLatestReleaseURL
 	originalGitHubDownload := GitHubDownloadURL
@@ -166,7 +166,7 @@ func TestAutoUpdate(t *testing.T) {
 	os.Args[0] = tmpFile.Name()
 	defer func() { os.Args[0] = originalArg0 }()
 
-	if err := AutoUpdate(); err != nil {
+	if err := AutoUpdate(Version); err != nil {
 		t.Errorf("AutoUpdate() error = %v, want nil", err)
 	}
 	if !exitCalled {
@@ -185,7 +185,7 @@ func TestAutoUpdate_NotFound(t *testing.T) {
 
 	GitHubLatestReleaseURL = func() string { return mockServer.URL + "/repos/Chocapikk/wpprobe/releases/latest" }
 
-	err := AutoUpdate()
+	err := AutoUpdate(Version)
 	if err == nil {
 		t.Error("Expected error for 404, got nil")
 	}

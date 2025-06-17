@@ -30,6 +30,8 @@ import (
 
 const githubRepo = "Chocapikk/wpprobe"
 
+var Version = "dev"
+
 var exitFunc = os.Exit
 
 var GitHubLatestReleaseURL = func() string {
@@ -59,7 +61,7 @@ func getLatestVersion() (string, error) {
 		DefaultLogger.Error("Failed to fetch latest release: " + err.Error())
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		DefaultLogger.Error(fmt.Sprintf("GitHub API error: %d", resp.StatusCode))
@@ -82,17 +84,24 @@ func getLatestVersion() (string, error) {
 	return version, nil
 }
 
-func AutoUpdate() error {
+func AutoUpdate(currentVersion string) error {
 	DefaultLogger.Info("Checking for WPProbe updates...")
 
-	version, err := getLatestVersion()
+	latest, err := getLatestVersion()
 	if err != nil {
 		return err
 	}
 
+	if currentVersion == latest {
+		DefaultLogger.Info(
+			fmt.Sprintf("WPProbe is already up-to-date (version %s)", currentVersion),
+		)
+		return nil
+	}
+
 	osName := detectOS()
 	arch := detectArch()
-	updateURL := GitHubDownloadURL(version, osName, arch)
+	updateURL := GitHubDownloadURL(latest, osName, arch)
 
 	DefaultLogger.Info("Downloading WPProbe update from: " + updateURL)
 	resp, err := http.Get(updateURL)
@@ -100,7 +109,7 @@ func AutoUpdate() error {
 		DefaultLogger.Error("Failed to download update: " + err.Error())
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		DefaultLogger.Error(fmt.Sprintf("Update not found: %s", updateURL))
@@ -145,10 +154,6 @@ func AutoUpdate() error {
 	return nil
 }
 
-func detectOS() string {
-	return runtime.GOOS
-}
+func detectOS() string { return runtime.GOOS }
 
-func detectArch() string {
-	return runtime.GOARCH
-}
+func detectArch() string { return runtime.GOARCH }
