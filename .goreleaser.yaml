@@ -26,7 +26,7 @@ builds:
       - 6
       - 7
     ldflags:
-      - "-s -w -X github.com/Chocapikk/wpprobe/utils.Version=v{{ .Version }}"
+      - "-s -w -X github.com/Chocapikk/wpprobe/internal/utils.Version=v{{ .Version }}"
 
   - id: wpprobe-android
     main: ./main.go
@@ -43,7 +43,7 @@ builds:
       - 6
       - 7
     ldflags:
-      - "-s -w -X github.com/Chocapikk/wpprobe/utils.Version=v{{ .Version }}"
+      - "-s -w -X github.com/Chocapikk/wpprobe/internal/utils.Version=v{{ .Version }}"
 
 archives:
   - id: custom
