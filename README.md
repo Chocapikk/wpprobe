@@ -119,6 +119,17 @@ go install github.com/Chocapikk/wpprobe@latest
    docker run -it --rm wpprobe
    ```
 
+### Option :four: (Distributions)
+
+#### Nixpkgs
+
+For Nix or NixOS users is a package available. Keep in mind that the lastest releases might only
+be present in the ``unstable`` channel.
+
+```bash
+nix-shell -p wpprobe
+```
+
 ---
 
 ## 🕵️ Usage  
