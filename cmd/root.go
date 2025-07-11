@@ -48,7 +48,7 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(updateDbCmd)
 
-	rootCmd.SetVersionTemplate("WPProbe version {{.utils.Version}}\n")
+	rootCmd.SetVersionTemplate("WPProbe version {{.Version}}\n")
 
 	rootCmd.SilenceErrors = true
 
@@ -57,6 +57,7 @@ func init() {
 			utils.DefaultLogger.Error(err.Error())
 			return err
 		})
+
 		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 			if cmd.Parent() == nil {
 				utils.DefaultLogger.Error("Unknown command: " + cmd.Name())
