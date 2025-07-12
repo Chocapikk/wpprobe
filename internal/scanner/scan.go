@@ -21,7 +21,6 @@ package scanner
 
 import (
 	"fmt"
-	"math"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
@@ -55,7 +54,16 @@ func ScanTargets(opts ScanOptions) {
 	}
 
 	vulns, _ := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
-	siteThreads := int(math.Max(1, float64(opts.Threads)/float64(len(targets))))
+	siteThreads := opts.Threads
+
+	if siteThreads < 1 {
+		siteThreads = 1
+	}
+
+	if siteThreads > len(targets) {
+		siteThreads = len(targets)
+	}
+	sem := make(chan struct{}, siteThreads)
 
 	var progress *utils.ProgressManager
 	if opts.File != "" {
@@ -71,7 +79,6 @@ func ScanTargets(opts ScanOptions) {
 	}
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, siteThreads)
 	for _, target := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
