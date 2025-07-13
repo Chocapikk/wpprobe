@@ -21,6 +21,7 @@ package scanner
 
 import (
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
@@ -50,24 +51,26 @@ func ScanTargets(opts ScanOptions) {
 		}
 		targets = lines
 	} else {
-		targets = append(targets, opts.URL)
+		targets = []string{opts.URL}
 	}
 
 	vulns, _ := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
-	siteThreads := opts.Threads
 
-	if siteThreads < 1 {
-		siteThreads = 1
+	totalThreads := opts.Threads
+	if totalThreads < 1 {
+		totalThreads = 1
 	}
 
-	if siteThreads > len(targets) {
-		siteThreads = len(targets)
-	}
-	sem := make(chan struct{}, siteThreads)
+	n := len(targets)
+
+	perSite := int(math.Max(1, float64(totalThreads)/float64(n)))
+	siteConcurrent := int(math.Min(float64(totalThreads), float64(n)))
+
+	sem := make(chan struct{}, siteConcurrent)
 
 	var progress *utils.ProgressManager
 	if opts.File != "" {
-		progress = utils.NewProgressBar(len(targets), "🔎 Scanning...")
+		progress = utils.NewProgressBar(n, "🔎 Scanning...")
 	} else {
 		progress = utils.NewProgressBar(1, "🔎 Scanning...")
 	}
@@ -82,13 +85,15 @@ func ScanTargets(opts ScanOptions) {
 	for _, target := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
+
 		go func(t string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			defer func() { _ = recover() }()
 
 			local := opts
-			local.Threads = siteThreads
+			local.Threads = perSite
+
 			ScanSite(t, local, writer, progress, vulns)
 
 			if opts.File != "" && progress != nil {
@@ -96,8 +101,8 @@ func ScanTargets(opts ScanOptions) {
 			}
 		}(target)
 	}
-	wg.Wait()
 
+	wg.Wait()
 	if progress != nil {
 		progress.Finish()
 	}
