@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
 	"github.com/Chocapikk/wpprobe/internal/utils"
 )
 

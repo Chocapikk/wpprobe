@@ -22,6 +22,7 @@ package cmd
 import (
 	"os"
 	"strings"
+
 	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/spf13/cobra"
