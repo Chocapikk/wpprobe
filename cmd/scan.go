@@ -21,11 +21,33 @@ package cmd
 
 import (
 	"os"
-
+	"strings"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/spf13/cobra"
 )
+
+func getProxyFromEnv() (string, string) {
+	if v := firstNonEmpty(os.Getenv("HTTPS_PROXY"), os.Getenv("https_proxy")); v != "" {
+		return v, "HTTPS_PROXY"
+	}
+	if v := firstNonEmpty(os.Getenv("HTTP_PROXY"), os.Getenv("http_proxy")); v != "" {
+		return v, "HTTP_PROXY"
+	}
+	if v := firstNonEmpty(os.Getenv("ALL_PROXY"), os.Getenv("all_proxy")); v != "" {
+		return v, "ALL_PROXY"
+	}
+	return "", ""
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
@@ -36,6 +58,25 @@ var scanCmd = &cobra.Command{
 		outputFormat := utils.DetectOutputFormat(outputFile)
 
 		headers, _ := cmd.Flags().GetStringArray("header")
+
+		proxyURL := cmd.Flag("proxy").Value.String()
+
+		if strings.TrimSpace(proxyURL) != "" {
+			utils.DefaultLogger.Info("Using given proxy: " + proxyURL)
+		} else {
+			utils.DefaultLogger.Info("No proxy URL provided, checking environment variables")
+			if envProxy, from := getProxyFromEnv(); envProxy != "" {
+				proxyURL = envProxy
+				utils.DefaultLogger.Info("Using proxy from " + from + ": " + proxyURL)
+			} else {
+				noProxy := firstNonEmpty(os.Getenv("NO_PROXY"), os.Getenv("no_proxy"))
+				if noProxy != "" {
+					utils.DefaultLogger.Info("No explicit proxy; NO_PROXY is set: " + noProxy)
+				} else {
+					utils.DefaultLogger.Info("No proxy configured; using direct connection")
+				}
+			}
+		}
 
 		opts := scanner.ScanOptions{
 			URL:            cmd.Flag("url").Value.String(),
@@ -48,6 +89,7 @@ var scanCmd = &cobra.Command{
 			ScanMode:       cmd.Flag("mode").Value.String(),
 			PluginList:     cmd.Flag("plugin-list").Value.String(),
 			Headers:        headers,
+			Proxy:          proxyURL,
 		}
 
 		if opts.URL == "" && opts.File == "" {
@@ -71,6 +113,7 @@ func init() {
 		StringP("plugin-list", "p", "", "Path to a custom plugin list file for bruteforce mode")
 	scanCmd.Flags().
 		StringArrayP("header", "H", []string{}, "HTTP header to include in requests. Can be specified multiple times.")
+	scanCmd.Flags().String("proxy", "", "HTTP/HTTPS proxy URL (e.g., http://127.0.0.1:8080)")
 }
 
 func mustBool(value bool, err error) bool {

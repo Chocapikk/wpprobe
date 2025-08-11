@@ -29,9 +29,9 @@ import (
 	"golang.org/x/net/html"
 )
 
-func discoverPluginsFromHTML(target string, headers []string) ([]string, error) {
+func discoverPluginsFromHTML(target string, headers []string, proxyURL string) ([]string, error) {
 	normalized := utils.NormalizeURL(target)
-	client := utils.NewHTTPClient(10*time.Second, headers)
+	client := utils.NewHTTPClient(10*time.Second, headers, proxyURL)
 
 	slugsSet := make(map[string]struct{})
 

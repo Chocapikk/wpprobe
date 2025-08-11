@@ -70,8 +70,8 @@ func CheckLatestVersion(currentVersion string) (string, bool) {
 	return latest.String(), curr.Compare(latest) >= 0
 }
 
-func GetPluginVersion(target, plugin string, _ int, headers []string) string {
-	httpClient := NewHTTPClient(10*time.Second, headers)
+func GetPluginVersion(target, plugin string, threads int, headers []string, proxyURL string) string {
+	httpClient := NewHTTPClient(10*time.Second, headers, proxyURL)
 	return fetchVersionFromReadme(httpClient, target, plugin)
 }
 

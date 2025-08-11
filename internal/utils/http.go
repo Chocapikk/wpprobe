@@ -26,6 +26,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -44,10 +45,19 @@ type HTTPClientManager struct {
 	headers   []string
 }
 
-func NewHTTPClient(timeout time.Duration, headers []string) *HTTPClientManager {
+func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string) *HTTPClientManager {
 	transport := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true,
+	}
+
+	// Configure proxy if provided
+	if proxyURL != "" {
+		proxy, err := url.Parse(proxyURL)
+		if err != nil {
+		} else {
+			transport.Proxy = http.ProxyURL(proxy)
+		}
 	}
 
 	client := &http.Client{
