@@ -188,6 +188,14 @@ Save scan results to a JSON file:
 ./wpprobe scan -f targets.txt -t 20 -o results.json
 ```
 
+### Use a custom HTTP/HTTPS proxy
+Route all requests through a specific proxy using `--proxy` argument. If `--proxy` is not specified, `WPProbe` will automatically check for the following environment variables (in priority order):
+- `HTTPS_PROXY` / `https_proxy`
+- `HTTP_PROXY` / `http_proxy`
+- `ALL_PROXY` / `all_proxy`
+
+Will also respect `NO_PROXY` / `no_proxy` for bypass rules.
+
 ---
 
 ## 📜 Example Output  
