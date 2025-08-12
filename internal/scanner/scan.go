@@ -39,10 +39,13 @@ type ScanOptions struct {
 	ScanMode       string
 	PluginList     string
 	Headers        []string
+	Proxy          string
 }
 
 func ScanTargets(opts ScanOptions) {
+
 	var targets []string
+
 	if opts.File != "" {
 		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
@@ -117,7 +120,7 @@ func performStealthyScan(
 		progress.SetMessage("🔎 Discovering plugins from HTML...")
 	}
 
-	htmlSlugs, err := discoverPluginsFromHTML(target, opts.Headers)
+	htmlSlugs, err := discoverPluginsFromHTML(target, opts.Headers, opts.Proxy)
 	if err != nil {
 		utils.DefaultLogger.Warning(fmt.Sprintf("HTML discovery failed on %s: %v", target, err))
 	}
@@ -137,7 +140,7 @@ func performStealthyScan(
 		return nil, PluginDetectionResult{}
 	}
 
-	endpoints := FetchEndpoints(target, opts.Headers)
+	endpoints := FetchEndpoints(target, opts.Headers, opts.Proxy)
 
 	var result PluginDetectionResult
 	if len(endpoints) > 0 {
@@ -191,7 +194,7 @@ func performBruteforceScan(
 		}
 	}
 
-	detected := BruteforcePlugins(target, plugins, threads, pb, opts.Headers)
+	detected := BruteforcePlugins(target, plugins, threads, pb, opts.Headers, opts.Proxy)
 
 	pr := PluginDetectionResult{
 		Plugins:  make(map[string]*PluginData, len(detected)),
@@ -247,7 +250,7 @@ func performHybridScan(
 		bruteBar = utils.NewProgressBar(len(remaining), "🔎 Bruteforcing remaining")
 	}
 
-	brutefound := BruteforcePlugins(target, remaining, threads, bruteBar, opts.Headers)
+	brutefound := BruteforcePlugins(target, remaining, threads, bruteBar, opts.Headers, opts.Proxy)
 
 	if bruteBar != nil {
 		bruteBar.Finish()
@@ -344,7 +347,7 @@ func ScanSite(
 
 			version := "unknown"
 			if !opts.NoCheckVersion {
-				version = utils.GetPluginVersion(target, pl, opts.Threads, opts.Headers)
+				version = utils.GetPluginVersion(target, pl, opts.Threads, opts.Headers, opts.Proxy)
 			}
 
 			var matched []wordfence.Vulnerability

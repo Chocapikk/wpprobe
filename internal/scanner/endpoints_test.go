@@ -104,7 +104,7 @@ func TestFetchEndpoints(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(tt.mockServer))
 			defer server.Close()
 
-			got := FetchEndpoints(server.URL, tt.headers)
+			got := FetchEndpoints(server.URL, tt.headers, "")
 
 			sort.Strings(got)
 			sort.Strings(tt.want)

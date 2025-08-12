@@ -56,6 +56,7 @@ func BruteforcePlugins(
 	threads int,
 	progress *utils.ProgressManager,
 	headers []string,
+	proxyURL string,
 ) []string {
 	if len(plugins) == 0 {
 		utils.DefaultLogger.Warning("No plugins provided for brute-force scan")
@@ -89,7 +90,7 @@ func BruteforcePlugins(
 				progress.SetMessage(fmt.Sprintf("🔎 Bruteforcing plugin %-30.30s", p))
 			}
 
-			version := utils.GetPluginVersion(normalized, p, threads, headers)
+			version := utils.GetPluginVersion(normalized, p, threads, headers, proxyURL)
 			if version != "" && version != "unknown" {
 				if progress != nil {
 					progress.ClearLine()
@@ -122,9 +123,10 @@ func HybridScan(
 	threads int,
 	progress *utils.ProgressManager,
 	headers []string,
+	proxyURL string,
 ) []string {
 	if len(stealthyPlugins) == 0 {
-		return BruteforcePlugins(target, bruteforcePlugins, threads, progress, headers)
+		return BruteforcePlugins(target, bruteforcePlugins, threads, progress, headers, proxyURL)
 	}
 
 	detectedMap := make(map[string]bool, len(stealthyPlugins))
@@ -139,7 +141,7 @@ func HybridScan(
 		}
 	}
 
-	brutefound := BruteforcePlugins(target, remaining, threads, progress, headers)
+	brutefound := BruteforcePlugins(target, remaining, threads, progress, headers, proxyURL)
 	result := make([]string, len(stealthyPlugins), len(stealthyPlugins)+len(brutefound))
 	copy(result, stealthyPlugins)
 	return append(result, brutefound...)

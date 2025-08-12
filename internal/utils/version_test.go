@@ -109,7 +109,7 @@ func TestGetPluginVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetPluginVersion(tt.target, tt.plugin, 2, nil)
+			got := GetPluginVersion(tt.target, tt.plugin, 2, nil, "")
 			if got != tt.expected {
 				t.Errorf("GetPluginVersion() = %v, want %v", got, tt.expected)
 			}
@@ -125,7 +125,7 @@ func Test_fetchVersionFromReadme(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	client := NewHTTPClient(5*time.Second, nil)
+	client := NewHTTPClient(5*time.Second, nil, "")
 	version := fetchVersionFromReadme(client, mockServer.URL, "sample")
 	if version != "3.4.1" {
 		t.Errorf("fetchVersionFromReadme() = %v, want %v", version, "3.4.1")
