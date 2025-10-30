@@ -222,56 +222,62 @@ http://localhost:5555,woocommerce,9.6.0,,,,,,,No vulnerabilities found
     "give": [
       {
         "version": "2.20.1",
-        "severities": {
-          "critical": [
-            {
-              "auth_type": "Unauth",
-              "vulnerabilities": [
-                {
-                  "cve": "CVE-2025-22777",
-                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2025-22777",
-                  "cvss_score": 9.8,
-                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                  "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection"
-                }
-              ]
-            }
-          ],
-          "high": [
-            {
-              "auth_type": "Privileged",
-              "vulnerabilities": [
-                {
-                  "cve": "CVE-2024-9130",
-                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-9130",
-                  "cvss_score": 7.2,
-                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H",
-                  "title": "GiveWP <= 3.16.1 - Authenticated SQL Injection"
-                }
-              ]
-            }
-          ],
-          "medium": [
-            {
-              "auth_type": "Auth",
-              "vulnerabilities": [
-                {
-                  "cve": "CVE-2024-1957",
-                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-1957",
-                  "cvss_score": 6.4,
-                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N",
-                  "title": "GiveWP <= 3.6.1 - Stored XSS via Shortcode"
-                }
-              ]
-            }
-          ]
-        }
+        "severities": [
+          {
+            "critical": [
+              {
+                "auth_type": "Unauth",
+                "vulnerabilities": [
+                  {
+                    "cve": "CVE-2025-22777",
+                    "cve_link": "https://www.cve.org/CVERecord?id=CVE-2025-22777",
+                    "cvss_score": 9.8,
+                    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                    "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "high": [
+              {
+                "auth_type": "Privileged",
+                "vulnerabilities": [
+                  {
+                    "cve": "CVE-2024-9130",
+                    "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-9130",
+                    "cvss_score": 7.2,
+                    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H",
+                    "title": "GiveWP <= 3.16.1 - Authenticated SQL Injection"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "medium": [
+              {
+                "auth_type": "Auth",
+                "vulnerabilities": [
+                  {
+                    "cve": "CVE-2024-1957",
+                    "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-1957",
+                    "cvss_score": 6.4,
+                    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N",
+                    "title": "GiveWP <= 3.6.1 - Stored XSS via Shortcode"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     ],
     "woocommerce": [
       {
         "version": "9.6.0",
-        "severities": {}
+        "severities": []
       }
     ]
   }
