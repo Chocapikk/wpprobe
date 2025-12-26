@@ -33,26 +33,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Cache golangci-lint
-        id: cache-golangci-lint
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/golangci-lint
-          key: ${{ runner.os }}-golangci-lint-v1.64.5
-          restore-keys: |
-            ${{ runner.os }}-golangci-lint-
-
       - name: Install dependencies
         run: go mod download
 
-      - name: Install golangci-lint
-        if: steps.cache-golangci-lint.outputs.cache-hit != 'true'
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.64.5
-          mv ./bin/golangci-lint /usr/local/bin/
-
       - name: Run golangci-lint
-        run: golangci-lint run --timeout=5m
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: v1.64.5
+          args: --timeout=5m
 
       - name: Run tests
         run: go test ./... -v
