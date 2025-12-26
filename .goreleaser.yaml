@@ -25,6 +25,8 @@ builds:
     goarm:
       - 6
       - 7
+    flags:
+      - -trimpath
     ldflags:
       - "-s -w -X github.com/Chocapikk/wpprobe/internal/utils.Version=v{{ .Version }}"
 
@@ -42,6 +44,8 @@ builds:
     goarm:
       - 6
       - 7
+    flags:
+      - -trimpath
     ldflags:
       - "-s -w -X github.com/Chocapikk/wpprobe/internal/utils.Version=v{{ .Version }}"
 
