@@ -43,8 +43,8 @@ jobs:
           version: v1.64.5
           args: --timeout=5m
 
-      - name: Run tests
-        run: go test ./... -v
+      - name: Run tests with coverage
+        run: go test ./... -v -coverprofile=coverage.out -covermode=atomic
 
       - name: Run benchmarks
         run: go test -bench=. -benchmem ./internal/scanner/... ./internal/vulnerability/... ./internal/file/... -run=^$ 2>&1 | tee benchmark_results.txt
@@ -55,6 +55,14 @@ jobs:
         with:
           name: benchmark-results
           path: benchmark_results.txt
+          retention-days: 7
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.out
           retention-days: 7
 
       - name: Build the project
