@@ -20,6 +20,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -64,7 +65,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	if !search.AnyFilterSet(flagCVE, flagPlugin, flagTitle, flagSeverity, flagAuth) {
 		errMsg := "please specify at least one filter: --cve, --plugin, --title, --severity, or --auth"
 		logger.DefaultLogger.Error(errMsg)
-		return fmt.Errorf(errMsg)
+		return errors.New(errMsg)
 	}
 
 	vulns, err := vulnerability.LoadWordfenceVulnerabilities()

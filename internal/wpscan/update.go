@@ -195,18 +195,6 @@ func makeAPIRequest(url, headerName, headerValue string, timeout time.Duration, 
 	return nil
 }
 
-func fetchPluginVulnerabilities(pluginSlug, apiToken string) ([]Vulnerability, error) {
-	url := fmt.Sprintf("%s/plugins/%s", wpscanAPIBase, pluginSlug)
-	var data map[string]interface{}
-	if err := makeAPIRequest(url, "Authorization", fmt.Sprintf("Token token=%s", apiToken), httpTimeoutShort, &data); err != nil {
-		if err.Error() == fmt.Sprintf("unexpected status: %d", nethttp.StatusNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return processWPScanPluginData(pluginSlug, data)
-}
-
 func processWPScanPluginData(pluginSlug string, data map[string]interface{}) ([]Vulnerability, error) {
 	var vulnerabilities []Vulnerability
 

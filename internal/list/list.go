@@ -34,15 +34,13 @@ func RunList() error {
 		return err
 	}
 
-	count := make(map[string]int)
-	total := 0
+	total := len(vulns)
 
 	severities := make([]string, len(vulns))
 	for i, v := range vulns {
 		severities[i] = v.Severity
 	}
-	count = severity.CountBySeverity(severities)
-	total = len(vulns)
+	count := severity.CountBySeverity(severities)
 
 	root := tree.Root(scanner.TitleStyle.Render("📊 CVE coverage database"))
 
