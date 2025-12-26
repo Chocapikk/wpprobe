@@ -46,6 +46,17 @@ jobs:
       - name: Run tests
         run: go test ./... -v
 
+      - name: Run benchmarks
+        run: go test -bench=. -benchmem ./internal/scanner/... ./internal/vulnerability/... ./internal/file/... -run=^$ 2>&1 | tee benchmark_results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: benchmark_results.txt
+          retention-days: 7
+
       - name: Build the project
         run: go build ./...
 
