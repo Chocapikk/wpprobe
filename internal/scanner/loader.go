@@ -26,7 +26,6 @@ import (
 	"fmt"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
-	"github.com/Chocapikk/wpprobe/internal/logger"
 )
 
 // LoadPluginsFromFile loads a list of plugins from an embedded file or a user-specified file.
@@ -36,8 +35,8 @@ func LoadPluginsFromFile(filename string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load default plugin list: %w", err)
 		}
-		var plugins []string
 		scanner := bufio.NewScanner(bytes.NewReader(data))
+		plugins := make([]string, 0, 1000)
 		for scanner.Scan() {
 			if line := scanner.Text(); line != "" {
 				plugins = append(plugins, line)
@@ -50,21 +49,20 @@ func LoadPluginsFromFile(filename string) ([]string, error) {
 
 // LoadPluginEndpointsFromData loads plugin endpoints from JSONL data.
 func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
-	pluginEndpoints := make(map[string][]string)
-	scanner := bufio.NewScanner(bytes.NewReader(data))
+	lines := bytes.Split(data, []byte{'\n'})
+	pluginEndpoints := make(map[string][]string, len(lines))
 
-	for scanner.Scan() {
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
 		var pluginData map[string][]string
-		if err := json.Unmarshal(scanner.Bytes(), &pluginData); err != nil {
+		if err := json.Unmarshal(line, &pluginData); err != nil {
 			continue
 		}
 		for plugin, endpoints := range pluginData {
 			pluginEndpoints[plugin] = endpoints
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		logger.DefaultLogger.Error("Error reading embedded JSONL data: " + err.Error())
-		return nil, err
 	}
 	return pluginEndpoints, nil
 }

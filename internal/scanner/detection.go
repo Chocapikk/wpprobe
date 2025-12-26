@@ -20,9 +20,13 @@
 package scanner
 
 import (
-	"fmt"
 	"math"
+	"strings"
 )
+
+func buildEndpointsKey(endpoints []string) string {
+	return strings.Join(endpoints, "|")
+}
 
 // DetectPlugins detects plugins by matching detected endpoints with known plugin endpoints.
 func DetectPlugins(
@@ -65,7 +69,8 @@ func DetectPlugins(
 	ambiguousGroups := make(map[string][]string)
 	pluginEndpointsMap := make(map[string]string)
 	for plugin := range detection.Plugins {
-		key := fmt.Sprintf("%v", pluginEndpoints[plugin])
+		endpoints := pluginEndpoints[plugin]
+		key := buildEndpointsKey(endpoints)
 		pluginEndpointsMap[plugin] = key
 		ambiguousGroups[key] = append(ambiguousGroups[key], plugin)
 	}

@@ -338,8 +338,9 @@ func ReadLines(filename string) ([]string, error) {
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
-	var lines []string
+
 	scanner := bufio.NewScanner(file)
+	lines := make([]string, 0, 1000)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
