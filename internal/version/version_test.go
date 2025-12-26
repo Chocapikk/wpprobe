@@ -17,19 +17,21 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package version
 
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
+	nethttp "net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
 func TestCheckLatestVersion(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		tags := []struct {
 			Name string `json:"name"`
 		}{
@@ -73,13 +75,13 @@ func TestCheckLatestVersion(t *testing.T) {
 }
 
 func TestGetPluginVersion(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		var err error
 		switch r.URL.Path {
 		case "/wp-content/plugins/test-plugin/readme.txt":
 			_, err = fmt.Fprintln(w, "Stable tag: 1.0.0")
 		default:
-			http.NotFound(w, r)
+			nethttp.NotFound(w, r)
 		}
 		if err != nil {
 			t.Errorf("Failed to write response: %v", err)
@@ -109,7 +111,7 @@ func TestGetPluginVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetPluginVersion(tt.target, tt.plugin, 2, nil, "")
+			got := GetPluginVersion(tt.target, tt.plugin, nil, "", 0)
 			if got != tt.expected {
 				t.Errorf("GetPluginVersion() = %v, want %v", got, tt.expected)
 			}
@@ -118,14 +120,14 @@ func TestGetPluginVersion(t *testing.T) {
 }
 
 func Test_fetchVersionFromReadme(t *testing.T) {
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServer := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		if _, err := w.Write([]byte("Stable tag: 3.4.1")); err != nil {
 			t.Errorf("Failed to write response: %v", err)
 		}
 	}))
 	defer mockServer.Close()
 
-	client := NewHTTPClient(5*time.Second, nil, "")
+	client := http.NewHTTPClient(5*time.Second, nil, "", 0)
 	version := fetchVersionFromReadme(client, mockServer.URL, "sample")
 	if version != "3.4.1" {
 		t.Errorf("fetchVersionFromReadme() = %v, want %v", version, "3.4.1")

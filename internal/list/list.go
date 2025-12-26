@@ -21,61 +21,47 @@ package list
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Chocapikk/wpprobe/internal/scanner"
-	"github.com/Chocapikk/wpprobe/internal/wordfence"
+	"github.com/Chocapikk/wpprobe/internal/severity"
+	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 	"github.com/charmbracelet/lipgloss/tree"
 )
 
 func RunList() error {
-	vulns, err := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
+	vulns, err := vulnerability.LoadWordfenceVulnerabilities()
 	if err != nil {
 		return err
 	}
 
-	count := map[string]int{
-		"critical": 0,
-		"high":     0,
-		"medium":   0,
-		"low":      0,
-		"unknown":  0,
-	}
-	for _, v := range vulns {
-		sev := strings.ToLower(v.Severity)
-		if _, ok := count[sev]; !ok {
-			sev = "unknown"
-		}
-		count[sev]++
-	}
-
+	count := make(map[string]int)
 	total := 0
-	for _, c := range count {
-		total += c
+
+	severities := make([]string, len(vulns))
+	for i, v := range vulns {
+		severities[i] = v.Severity
 	}
+	count = severity.CountBySeverity(severities)
+	total = len(vulns)
 
 	root := tree.Root(scanner.TitleStyle.Render("📊 CVE coverage database"))
 
-	type line struct {
-		key   string
-		style func(string) string
+	styles := map[string]func(string) string{
+		"critical": func(s string) string { return scanner.CriticalStyle.Render(s) },
+		"high":     func(s string) string { return scanner.HighStyle.Render(s) },
+		"medium":   func(s string) string { return scanner.MediumStyle.Render(s) },
+		"low":      func(s string) string { return scanner.LowStyle.Render(s) },
+		"unknown":  func(s string) string { return scanner.UnknownStyle.Render(s) },
 	}
 
-	lines := []line{
-		{"critical", func(s string) string { return scanner.CriticalStyle.Render(s) }},
-		{"high", func(s string) string { return scanner.HighStyle.Render(s) }},
-		{"medium", func(s string) string { return scanner.MediumStyle.Render(s) }},
-		{"low", func(s string) string { return scanner.LowStyle.Render(s) }},
-		{"unknown", func(s string) string { return scanner.UnknownStyle.Render(s) }},
-	}
-
-	for _, l := range lines {
-		if count[l.key] == 0 {
+	for _, sev := range severity.Order {
+		if count[sev] == 0 {
 			continue
 		}
-		capKey := strings.ToUpper(l.key[:1]) + l.key[1:]
-		label := l.style(fmt.Sprintf("%-8s", capKey))
-		root.Child(tree.Root(fmt.Sprintf("%s: %d", label, count[l.key])))
+		capKey := severity.FormatTitleCase(sev)
+		styleFunc := styles[sev]
+		label := styleFunc(fmt.Sprintf("%-8s", capKey))
+		root.Child(tree.Root(fmt.Sprintf("%s: %d", label, count[sev])))
 	}
 
 	root.Child(tree.Root(scanner.URLStyle.Render(

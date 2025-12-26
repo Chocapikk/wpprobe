@@ -17,7 +17,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package version
 
 import (
 	"encoding/json"
@@ -26,6 +26,8 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+
+	"github.com/Chocapikk/wpprobe/internal/logger"
 )
 
 const githubRepo = "Chocapikk/wpprobe"
@@ -55,37 +57,37 @@ var GitHubDownloadURL = func(version, osName, arch string) string {
 }
 
 func getLatestVersion() (string, error) {
-	DefaultLogger.Info("Fetching latest WPProbe version...")
+	logger.DefaultLogger.Info("Fetching latest WPProbe version...")
 	resp, err := http.Get(GitHubLatestReleaseURL())
 	if err != nil {
-		DefaultLogger.Error("Failed to fetch latest release: " + err.Error())
+		logger.DefaultLogger.Error("Failed to fetch latest release: " + err.Error())
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		DefaultLogger.Error(fmt.Sprintf("GitHub API error: %d", resp.StatusCode))
+		logger.DefaultLogger.Error(fmt.Sprintf("GitHub API error: %d", resp.StatusCode))
 		return "", fmt.Errorf("GitHub API error: %d", resp.StatusCode)
 	}
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		DefaultLogger.Error("Failed to parse JSON response: " + err.Error())
+		logger.DefaultLogger.Error("Failed to parse JSON response: " + err.Error())
 		return "", err
 	}
 
 	version, ok := result["tag_name"].(string)
 	if !ok || version == "" {
-		DefaultLogger.Error("Failed to extract latest version from GitHub API")
+		logger.DefaultLogger.Error("Failed to extract latest version from GitHub API")
 		return "", fmt.Errorf("invalid version format")
 	}
 
-	DefaultLogger.Success("Latest WPProbe version found: " + version)
+	logger.DefaultLogger.Success("Latest WPProbe version found: " + version)
 	return version, nil
 }
 
 func AutoUpdate(currentVersion string) error {
-	DefaultLogger.Info("Checking for WPProbe updates...")
+	logger.DefaultLogger.Info("Checking for WPProbe updates...")
 
 	latest, err := getLatestVersion()
 	if err != nil {
@@ -93,7 +95,7 @@ func AutoUpdate(currentVersion string) error {
 	}
 
 	if currentVersion == latest {
-		DefaultLogger.Info(
+		logger.DefaultLogger.Info(
 			fmt.Sprintf("WPProbe is already up-to-date (version %s)", currentVersion),
 		)
 		return nil
@@ -103,53 +105,53 @@ func AutoUpdate(currentVersion string) error {
 	arch := detectArch()
 	updateURL := GitHubDownloadURL(latest, osName, arch)
 
-	DefaultLogger.Info("Downloading WPProbe update from: " + updateURL)
+	logger.DefaultLogger.Info("Downloading WPProbe update from: " + updateURL)
 	resp, err := http.Get(updateURL)
 	if err != nil {
-		DefaultLogger.Error("Failed to download update: " + err.Error())
+		logger.DefaultLogger.Error("Failed to download update: " + err.Error())
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		DefaultLogger.Error(fmt.Sprintf("Update not found: %s", updateURL))
+		logger.DefaultLogger.Error(fmt.Sprintf("Update not found: %s", updateURL))
 		return fmt.Errorf("update not found at %s", updateURL)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		DefaultLogger.Error("Failed to read update response: " + err.Error())
+		logger.DefaultLogger.Error("Failed to read update response: " + err.Error())
 		return err
 	}
 
 	currentExe, err := os.Executable()
 	if err != nil {
-		DefaultLogger.Error("Failed to determine executable path: " + err.Error())
+		logger.DefaultLogger.Error("Failed to determine executable path: " + err.Error())
 		return err
 	}
 
-	DefaultLogger.Info("Replacing current binary: " + currentExe)
+	logger.DefaultLogger.Info("Replacing current binary: " + currentExe)
 	tmpFile := currentExe + ".tmp"
 
 	if err := os.WriteFile(tmpFile, body, 0o755); err != nil {
-		DefaultLogger.Error("Failed to write temp file: " + err.Error())
+		logger.DefaultLogger.Error("Failed to write temp file: " + err.Error())
 		return err
 	}
 
 	if runtime.GOOS == "windows" {
 		if err := os.Remove(currentExe); err != nil {
-			DefaultLogger.Warning(
+			logger.DefaultLogger.Warning(
 				"Failed removing current file (Windows lock issues?). " + err.Error(),
 			)
 		}
 	}
 
 	if err := os.Rename(tmpFile, currentExe); err != nil {
-		DefaultLogger.Error("Failed to replace old binary: " + err.Error())
+		logger.DefaultLogger.Error("Failed to replace old binary: " + err.Error())
 		return err
 	}
 
-	DefaultLogger.Success("Update successful! Restart WPProbe to use the new version.")
+	logger.DefaultLogger.Success("Update successful! Restart WPProbe to use the new version.")
 	exitFunc(0)
 	return nil
 }

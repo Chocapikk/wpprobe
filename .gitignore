@@ -1,0 +1,75 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+wpprobe
+wpprobe.exe
+wpprobe_*
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+/temp/
+
+# Test files
+test_*.txt
+test_*.json
+test_*.csv
+/tmp/test_*.txt
+
+# Configuration files (user-specific)
+*.local
+.env
+.env.local
+
+# Output files from scans
+*.csv
+*.json
+!internal/file/files/*.json
+!internal/file/files/*.txt
+
+# Logs
+*.log
+logs/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# User config directory (contains downloaded vulnerability DB)
+# Note: This is typically in ~/.config/wpprobe/ but we ignore it here
+# in case someone runs tests that create it in the repo
+.config/

@@ -21,22 +21,32 @@ package cmd
 
 import (
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
+	"github.com/Chocapikk/wpprobe/internal/wpscan"
 	"github.com/spf13/cobra"
 )
 
-var updateWordfenceFunc = wordfence.UpdateWordfence
+var (
+	updateWordfenceFunc = wordfence.UpdateWordfence
+	updateWPScanFunc    = wpscan.UpdateWPScan
+)
 
-func runUpdateWordfence(cmd *cobra.Command, args []string) error {
+func runUpdateDb(cmd *cobra.Command, args []string) error {
 	if err := updateWordfenceFunc(); err != nil {
 		cmd.PrintErrf("Failed to update Wordfence database: %v\n", err)
 		return err
 	}
+
+	if err := updateWPScanFunc(); err != nil {
+		cmd.PrintErrf("Failed to update WPScan database: %v\n", err)
+		return err
+	}
+
 	return nil
 }
 
 var updateDbCmd = &cobra.Command{
 	Use:   "update-db",
-	Short: "Update the Wordfence vulnerability database",
-	Long:  "Fetches the latest Wordfence vulnerability database and updates the local JSON file.",
-	RunE:  runUpdateWordfence,
+	Short: "Update vulnerability databases",
+	Long:  "Fetches the latest Wordfence and WPScan vulnerability databases and updates the local JSON files.",
+	RunE:  runUpdateDb,
 }

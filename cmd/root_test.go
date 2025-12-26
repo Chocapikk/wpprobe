@@ -42,6 +42,10 @@ func TestExecute(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				os.Stdout = oldStdout
+				_ = w.Close()
+			}()
 
 			go func() {
 				Execute()
@@ -51,8 +55,6 @@ func TestExecute(t *testing.T) {
 			var buf bytes.Buffer
 			_, _ = buf.ReadFrom(r)
 			output := buf.String()
-
-			os.Stdout = oldStdout
 
 			if !strings.Contains(output, tt.wantOut) {
 				t.Errorf("Execute() output = %v, want to contain %v", output, tt.wantOut)

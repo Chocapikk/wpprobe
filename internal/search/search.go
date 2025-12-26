@@ -25,17 +25,21 @@ import (
 	"strings"
 
 	"github.com/Chocapikk/wpprobe/internal/scanner"
+	"github.com/Chocapikk/wpprobe/internal/severity"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 	"github.com/charmbracelet/lipgloss/tree"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
-var (
-	titleCaser    = cases.Title(language.English)
-	SeverityOrder = []string{"critical", "high", "medium", "low", "unknown"}
-)
+// FilterCriteria contains all filter criteria for searching vulnerabilities.
+type FilterCriteria struct {
+	CVE      string
+	Plugin   string
+	Title    string
+	Severity string
+	Auth     string
+}
 
+// AnyFilterSet checks if any filter in the criteria is set.
 func AnyFilterSet(filters ...string) bool {
 	for _, f := range filters {
 		if f != "" {
@@ -45,25 +49,25 @@ func AnyFilterSet(filters ...string) bool {
 	return false
 }
 
+// FilterAll filters vulnerabilities based on the provided criteria.
 func FilterAll(
 	vs []wordfence.Vulnerability,
 	cve, slug, title, sev, auth string,
 ) []wordfence.Vulnerability {
+	criteria := FilterCriteria{
+		CVE:      cve,
+		Plugin:   slug,
+		Title:    title,
+		Severity: sev,
+		Auth:     auth,
+	}
+	return filterByCriteria(vs, criteria)
+}
+
+func filterByCriteria(vs []wordfence.Vulnerability, criteria FilterCriteria) []wordfence.Vulnerability {
 	out := make([]wordfence.Vulnerability, 0, len(vs))
 	for _, v := range vs {
-		if cve != "" && !strings.Contains(strings.ToLower(v.CVE), strings.ToLower(cve)) {
-			continue
-		}
-		if slug != "" && !strings.Contains(strings.ToLower(v.Slug), strings.ToLower(slug)) {
-			continue
-		}
-		if title != "" && !strings.Contains(strings.ToLower(v.Title), strings.ToLower(title)) {
-			continue
-		}
-		if sev != "" && !strings.EqualFold(v.Severity, sev) {
-			continue
-		}
-		if auth != "" && !strings.EqualFold(v.AuthType, auth) {
+		if !matchesCriteria(v, criteria) {
 			continue
 		}
 		out = append(out, v)
@@ -71,6 +75,30 @@ func FilterAll(
 	return out
 }
 
+func matchesCriteria(v wordfence.Vulnerability, criteria FilterCriteria) bool {
+	if criteria.CVE != "" && !containsIgnoreCase(v.CVE, criteria.CVE) {
+		return false
+	}
+	if criteria.Plugin != "" && !containsIgnoreCase(v.Slug, criteria.Plugin) {
+		return false
+	}
+	if criteria.Title != "" && !containsIgnoreCase(v.Title, criteria.Title) {
+		return false
+	}
+	if criteria.Severity != "" && !strings.EqualFold(v.Severity, criteria.Severity) {
+		return false
+	}
+	if criteria.Auth != "" && !strings.EqualFold(v.AuthType, criteria.Auth) {
+		return false
+	}
+	return true
+}
+
+func containsIgnoreCase(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// GroupByPlugin groups vulnerabilities by plugin slug.
 func GroupByPlugin(vs []wordfence.Vulnerability) map[string][]wordfence.Vulnerability {
 	m := make(map[string][]wordfence.Vulnerability)
 	for _, v := range vs {
@@ -79,114 +107,163 @@ func GroupByPlugin(vs []wordfence.Vulnerability) map[string][]wordfence.Vulnerab
 	return m
 }
 
+// BuildTree builds a tree structure for displaying search results.
 func BuildTree(root *tree.Tree, byPlugin map[string][]wordfence.Vulnerability, showDetails bool) {
-	slugs := make([]string, 0, len(byPlugin))
-	for slug := range byPlugin {
-		slugs = append(slugs, slug)
-	}
-	sort.Strings(slugs)
+	slugs := sortedPluginSlugs(byPlugin)
 
 	for _, slug := range slugs {
 		list := byPlugin[slug]
-		sort.Slice(list, func(i, j int) bool {
-			i1 := indexOf(SeverityOrder, strings.ToLower(list[i].Severity))
-			j1 := indexOf(SeverityOrder, strings.ToLower(list[j].Severity))
-			if i1 != j1 {
-				return i1 < j1
-			}
-			return list[i].CVE < list[j].CVE
-		})
+		sortedList := sortVulnerabilitiesBySeverity(list)
+		counts := countBySeverity(sortedList)
 
-		counts := map[string]int{"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
-		for _, v := range list {
-			s := strings.ToLower(v.Severity)
-			if _, ok := counts[s]; !ok {
-				s = "unknown"
-			}
-			counts[s]++
-		}
-
-		label := fmt.Sprintf(
-			"%s  %s:%d %s:%d %s:%d %s:%d %s:%d",
-			scanner.URLStyle.Render(slug),
-			scanner.CriticalStyle.Render("C"), counts["critical"],
-			scanner.HighStyle.Render("H"), counts["high"],
-			scanner.MediumStyle.Render("M"), counts["medium"],
-			scanner.LowStyle.Render("L"), counts["low"],
-			scanner.UnknownStyle.Render("U"), counts["unknown"],
-		)
-		pluginNode := tree.Root(label)
-		pluginNode.Child(
-			tree.Root(fmt.Sprintf("Download: https://wordpress.org/plugins/%s/", slug)),
-		)
+		pluginNode := buildPluginNode(slug, counts)
+		pluginNode.Child(buildDownloadLink(slug))
 
 		if showDetails {
-			for _, sev := range SeverityOrder {
-				entries := filterBySeverity(list, sev)
-				if len(entries) == 0 {
-					continue
-				}
-				sevNode := tree.Root(severityLabel(sev))
-				for _, v := range entries {
-					cvss := formatCVSS(v.CVSSScore, v.Severity)
-					auth := formatAuth(v.AuthType)
-					sevNode.Child(fmt.Sprintf(
-						"%s - %s [%s] Auth:%s CVSS:%s",
-						v.CVE, v.CVELink, v.AffectedVersion, auth, cvss,
-					))
-				}
-				pluginNode.Child(sevNode)
-			}
+			addSeverityDetails(pluginNode, sortedList)
 		}
 
 		root.Child(pluginNode)
 	}
 }
 
+func sortedPluginSlugs(byPlugin map[string][]wordfence.Vulnerability) []string {
+	slugs := make([]string, 0, len(byPlugin))
+	for slug := range byPlugin {
+		slugs = append(slugs, slug)
+	}
+	sort.Strings(slugs)
+	return slugs
+}
+
+func sortVulnerabilitiesBySeverity(list []wordfence.Vulnerability) []wordfence.Vulnerability {
+	sorted := make([]wordfence.Vulnerability, len(list))
+	copy(sorted, list)
+	sort.Slice(sorted, func(i, j int) bool {
+		return compareVulnerabilities(i, j, sorted)
+	})
+	return sorted
+}
+
+func compareVulnerabilities(i, j int, vulns []wordfence.Vulnerability) bool {
+	a, b := vulns[i], vulns[j]
+	aIdx := severity.IndexOf(severity.Order, strings.ToLower(a.Severity))
+	bIdx := severity.IndexOf(severity.Order, strings.ToLower(b.Severity))
+	if aIdx != bIdx {
+		return aIdx < bIdx
+	}
+	return a.CVE < b.CVE
+}
+
+func countBySeverity(list []wordfence.Vulnerability) map[string]int {
+	severities := make([]string, len(list))
+	for i, v := range list {
+		severities[i] = v.Severity
+	}
+	return severity.CountBySeverity(severities)
+}
+
+func buildPluginNode(slug string, counts map[string]int) *tree.Tree {
+	label := formatPluginLabel(slug, counts)
+	return tree.Root(label)
+}
+
+func formatPluginLabel(slug string, counts map[string]int) string {
+	parts := []string{
+		scanner.URLStyle.Render(slug),
+		formatSeverityCount("C", "critical", counts),
+		formatSeverityCount("H", "high", counts),
+		formatSeverityCount("M", "medium", counts),
+		formatSeverityCount("L", "low", counts),
+		formatSeverityCount("U", "unknown", counts),
+	}
+	return strings.Join(parts, "  ")
+}
+
+func formatSeverityCount(abbrev, sev string, counts map[string]int) string {
+	styleFunc := getSeverityStyle(sev)
+	return fmt.Sprintf("%s:%d", styleFunc(abbrev), counts[sev])
+}
+
+func getSeverityStyle(sev string) func(string) string {
+	sevLower := strings.ToLower(sev)
+	styles := map[string]func(string) string{
+		"critical": func(s string) string { return scanner.CriticalStyle.Render(s) },
+		"high":     func(s string) string { return scanner.HighStyle.Render(s) },
+		"medium":   func(s string) string { return scanner.MediumStyle.Render(s) },
+		"low":      func(s string) string { return scanner.LowStyle.Render(s) },
+		"unknown":  func(s string) string { return scanner.UnknownStyle.Render(s) },
+	}
+	styleFunc, ok := styles[sevLower]
+	if !ok {
+		return styles["unknown"]
+	}
+	return styleFunc
+}
+
+func buildDownloadLink(slug string) *tree.Tree {
+	link := fmt.Sprintf("Download: https://wordpress.org/plugins/%s/", slug)
+	return tree.Root(scanner.URLStyle.Render(link))
+}
+
+func addSeverityDetails(pluginNode *tree.Tree, list []wordfence.Vulnerability) {
+	for _, sev := range severity.Order {
+		entries := filterBySeverity(list, sev)
+		if len(entries) == 0 {
+			continue
+		}
+		sevLabel := fmt.Sprintf("%s (%d)", severityLabel(sev), len(entries))
+		sevNode := tree.Root(sevLabel)
+		for _, v := range entries {
+			sevNode.Child(formatVulnerabilityEntry(v))
+		}
+		pluginNode.Child(sevNode)
+	}
+}
+
 func filterBySeverity(vs []wordfence.Vulnerability, sev string) []wordfence.Vulnerability {
 	out := make([]wordfence.Vulnerability, 0)
 	for _, v := range vs {
-		if strings.EqualFold(v.Severity, sev) {
-			out = append(out, v)
+		if !strings.EqualFold(v.Severity, sev) {
+			continue
 		}
+		out = append(out, v)
 	}
 	return out
 }
 
 func severityLabel(sev string) string {
-	lbl := titleCaser.String(strings.ToLower(sev))
-	switch strings.ToLower(sev) {
-	case "critical":
-		return scanner.CriticalStyle.Render(lbl)
-	case "high":
-		return scanner.HighStyle.Render(lbl)
-	case "medium":
-		return scanner.MediumStyle.Render(lbl)
-	case "low":
-		return scanner.LowStyle.Render(lbl)
-	default:
-		return scanner.UnknownStyle.Render(lbl)
+	lbl := severity.FormatTitleCase(sev)
+	styleFunc := getSeverityStyle(sev)
+	return styleFunc(lbl)
+}
+
+func formatVulnerabilityEntry(v wordfence.Vulnerability) string {
+	cvss := formatCVSS(v.CVSSScore, v.Severity)
+	auth := formatAuth(v.AuthType)
+	title := truncateString(v.Title, 60)
+	return fmt.Sprintf(
+		"%s - %s | %s | Auth:%s CVSS:%s",
+		v.CVE, v.CVELink, title, auth, cvss,
+	)
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
 	}
+	return s[:maxLen-3] + "..."
 }
 
 func formatCVSS(score float64, sev string) string {
 	s := fmt.Sprintf("%.1f", score)
-	switch strings.ToLower(sev) {
-	case "critical":
-		return scanner.CriticalStyle.Render(s)
-	case "high":
-		return scanner.HighStyle.Render(s)
-	case "medium":
-		return scanner.MediumStyle.Render(s)
-	case "low":
-		return scanner.LowStyle.Render(s)
-	default:
-		return scanner.UnknownStyle.Render(s)
-	}
+	styleFunc := getSeverityStyle(sev)
+	return styleFunc(s)
 }
 
 func formatAuth(auth string) string {
-	switch strings.ToLower(auth) {
+	authLower := severity.NormalizeAuth(auth)
+	switch authLower {
 	case "auth":
 		return scanner.AuthStyle.Render("Auth")
 	case "unauth":
@@ -196,13 +273,4 @@ func formatAuth(auth string) string {
 	default:
 		return scanner.UnknownStyle.Render(auth)
 	}
-}
-
-func indexOf(arr []string, s string) int {
-	for i, v := range arr {
-		if v == s {
-			return i
-		}
-	}
-	return len(arr)
 }

@@ -1,0 +1,189 @@
+// Copyright (c) 2025 Valentin Lobstein (Chocapikk) <balgogan@protonmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+// the Software, and to permit persons to whom the Software is furnished to do so,
+// subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+// IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+package scanner
+
+import (
+	"sync"
+
+	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/progress"
+	versionpkg "github.com/Chocapikk/wpprobe/internal/version"
+	"github.com/Chocapikk/wpprobe/internal/wordfence"
+)
+
+// CheckVulnerabilities checks vulnerabilities for detected plugins and returns entries.
+func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []file.PluginEntry) {
+	entriesMap := make(map[string]string, len(req.Plugins))
+	var entriesList []file.PluginEntry
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, req.Opts.Threads)
+
+	if req.Progress != nil && req.Opts.File == "" {
+		req.Progress.SetTotal(len(req.Plugins))
+		req.Progress.SetMessage("🔎 Checking versions & vulnerabilities...")
+	}
+
+	// Index vulnerabilities by slug for O(1) lookup instead of O(n) linear search
+	vulnIndex := buildVulnerabilityIndex(req.Vulns)
+
+	checkCtx := VulnerabilityCheckContext{
+		ScanContext: ScanContext{
+			Target:   req.Target,
+			Threads:  req.Opts.Threads,
+			HTTP:     HTTPConfig{Headers: req.Opts.Headers, Proxy: req.Opts.Proxy, RateLimit: req.Opts.RateLimit},
+			Progress: req.Progress,
+		},
+		SyncContext: SyncContext{
+			Mu:  &mu,
+			Wg:  &wg,
+			Sem: sem,
+		},
+		EntriesMap:      &entriesMap,
+		EntriesList:     &entriesList,
+		Vulnerabilities: req.Vulns,
+		VulnIndex:       vulnIndex,
+	}
+
+	for _, plugin := range req.Plugins {
+		wg.Add(1)
+		sem <- struct{}{}
+		go checkPluginVulnerabilities(plugin, req.Opts, checkCtx)
+	}
+
+	wg.Wait()
+	return entriesMap, entriesList
+}
+
+// buildVulnerabilityIndex creates a map of vulnerabilities indexed by plugin slug for fast lookup.
+func buildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]wordfence.Vulnerability {
+	index := make(map[string][]wordfence.Vulnerability)
+	for i := range vulns {
+		slug := vulns[i].Slug
+		if slug != "" {
+			index[slug] = append(index[slug], vulns[i])
+		}
+	}
+	return index
+}
+
+func checkPluginVulnerabilities(
+	plugin string,
+	opts ScanOptions,
+	ctx VulnerabilityCheckContext,
+) {
+	defer ctx.Wg.Done()
+	defer releaseSemaphore(ctx.Sem)
+	defer recoverFromPanic()
+
+	version := getPluginVersion(plugin, opts, ctx)
+	matched := findMatchingVulnerabilities(plugin, version, ctx.VulnIndex)
+	local := buildPluginEntries(plugin, version, matched)
+
+	// Prepare data before locking to minimize mutex hold time
+	ctx.Mu.Lock()
+	(*ctx.EntriesMap)[plugin] = version
+	*ctx.EntriesList = append(*ctx.EntriesList, local...)
+	ctx.Mu.Unlock()
+
+	// Update progress outside of mutex lock
+	incrementProgressIfNeeded(ctx.Progress, opts)
+}
+
+func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckContext) string {
+	if opts.NoCheckVersion {
+		return "unknown"
+	}
+	return versionpkg.GetPluginVersion(ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit)
+}
+
+func findMatchingVulnerabilities(
+	plugin string,
+	version string,
+	vulnIndex map[string][]wordfence.Vulnerability,
+) []wordfence.Vulnerability {
+	pluginVulns, exists := vulnIndex[plugin]
+	if !exists {
+		return nil
+	}
+
+	var matched []wordfence.Vulnerability
+	if version == "" || version == "unknown" {
+		// If version is unknown, return all vulnerabilities for this plugin
+		matched = make([]wordfence.Vulnerability, len(pluginVulns))
+		copy(matched, pluginVulns)
+		return matched
+	}
+
+	// Filter by version
+	for _, v := range pluginVulns {
+		if versionpkg.IsVersionVulnerable(version, v.FromVersion, v.ToVersion) {
+			matched = append(matched, v)
+		}
+	}
+	return matched
+}
+
+func buildPluginEntries(
+	plugin string,
+	version string,
+	matched []wordfence.Vulnerability,
+) []file.PluginEntry {
+	if len(matched) == 0 {
+		return []file.PluginEntry{createEmptyPluginEntry(plugin, version)}
+	}
+
+	var entries []file.PluginEntry
+	for _, v := range matched {
+		entries = append(entries, createVulnerablePluginEntry(plugin, version, v))
+	}
+	return entries
+}
+
+func createEmptyPluginEntry(plugin, version string) file.PluginEntry {
+	return file.PluginEntry{
+		Plugin:   plugin,
+		Version:  version,
+		CVEs:     []string{},
+		Severity: "none",
+		AuthType: "n/a",
+	}
+}
+
+func createVulnerablePluginEntry(
+	plugin string,
+	version string,
+	v wordfence.Vulnerability,
+) file.PluginEntry {
+	return file.PluginEntry{
+		Plugin:   plugin,
+		Version:  version,
+		CVEs:     []string{v.CVE},
+		Severity: v.Severity,
+		AuthType: v.AuthType,
+	}
+}
+
+func incrementProgressIfNeeded(progress *progress.ProgressManager, opts ScanOptions) {
+	if progress != nil && opts.File == "" {
+		progress.Increment()
+	}
+}

@@ -17,24 +17,24 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package cmd
+package file
 
 import (
+	"embed"
+
 	"github.com/Chocapikk/wpprobe/internal/logger"
-	"github.com/Chocapikk/wpprobe/internal/version"
-	"github.com/spf13/cobra"
 )
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update WPProbe to the latest version",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		current := version.Version
-		if err := version.AutoUpdate(current); err != nil {
-			logger.DefaultLogger.Error("Update failed: " + err.Error())
-			return err
-		}
-		logger.DefaultLogger.Success("Update completed successfully!")
-		return nil
-	},
+//go:embed files/scanned_plugins.json
+//go:embed files/wordpress_plugins.txt
+
+var embeddedFiles embed.FS
+
+func GetEmbeddedFile(filename string) ([]byte, error) {
+	data, err := embeddedFiles.ReadFile(filename)
+	if err != nil {
+		logger.DefaultLogger.Error("Failed to read embedded file: " + err.Error())
+		return nil, err
+	}
+	return data, nil
 }

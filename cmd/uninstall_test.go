@@ -24,8 +24,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/Chocapikk/wpprobe/internal/utils"
 )
 
 func createTempDirWithSubdir(t *testing.T) string {
@@ -51,7 +49,7 @@ func Test_removeDir(t *testing.T) {
 	if _, err := os.Stat(subdir); os.IsNotExist(err) {
 		t.Fatalf("Subdir does not exist before removal")
 	}
-	removeDir(subdir, "Test subdir", utils.DefaultLogger)
+	removeDir(subdir, "Test subdir")
 	if _, err := os.Stat(subdir); !os.IsNotExist(err) {
 		t.Errorf("Subdir was not removed")
 	}
@@ -62,21 +60,21 @@ func Test_removeFile(t *testing.T) {
 	if _, err := os.Stat(tmpFile); os.IsNotExist(err) {
 		t.Fatalf("Temp file does not exist before removal")
 	}
-	removeFile(tmpFile, "Test file", utils.DefaultLogger)
+	removeFile(tmpFile, "Test file")
 	if _, err := os.Stat(tmpFile); !os.IsNotExist(err) {
 		t.Errorf("Temp file was not removed")
 	}
 }
 
 func Test_mustGetUserConfigDir(t *testing.T) {
-	configDir := mustGetUserConfigDir(utils.DefaultLogger)
+	configDir := mustGetUserConfigDir()
 	if configDir == "" {
 		t.Errorf("mustGetUserConfigDir returned empty string")
 	}
 }
 
 func Test_mustGetExecutable(t *testing.T) {
-	execPath := mustGetExecutable(utils.DefaultLogger)
+	execPath := mustGetExecutable()
 	if execPath == "" {
 		t.Errorf("mustGetExecutable returned empty string")
 	}
@@ -86,12 +84,12 @@ func Test_mustGetExecutable(t *testing.T) {
 }
 
 func Test_mustErr_NoError(t *testing.T) {
-	mustErr(nil, "No error", utils.DefaultLogger)
+	mustErr(nil, "No error")
 }
 
 func Test_mustErr_WithError(t *testing.T) {
 	if os.Getenv("TEST_MUSTERR") == "1" {
-		mustErr(os.ErrInvalid, "Test mustErr with error", utils.DefaultLogger)
+		mustErr(os.ErrInvalid, "Test mustErr with error")
 		return
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=Test_mustErr_WithError")
@@ -136,24 +134,5 @@ func Test_uninstall(t *testing.T) {
 
 	if _, err := os.Stat(fakeBinary); !os.IsNotExist(err) {
 		t.Errorf("Fake binary was not removed")
-	}
-}
-
-func Test_mustErr(t *testing.T) {
-	type args struct {
-		err           error
-		msg           string
-		DefaultLogger *utils.Logger
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mustErr(tt.args.err, tt.args.msg, tt.args.DefaultLogger)
-		})
 	}
 }

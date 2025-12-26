@@ -17,46 +17,15 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package scanner
 
-import (
-	"strings"
-	"testing"
-)
-
-func TestGetEmbeddedFile(t *testing.T) {
-	tests := []struct {
-		name     string
-		filename string
-		wantSub  string
-		wantErr  bool
-	}{
-		{
-			name:     "Valid file",
-			filename: "files/scanned_plugins.json",
-			wantSub:  `"3d-viewer"`,
-			wantErr:  false,
-		},
-		{
-			name:     "Non-existent file",
-			filename: "files/nonexistent.json",
-			wantSub:  "",
-			wantErr:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetEmbeddedFile(tt.filename)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetEmbeddedFile() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if !tt.wantErr && !strings.Contains(string(got), tt.wantSub) {
-				t.Errorf("Expected content to contain '%s', but got: %s", tt.wantSub, string(got))
-			}
-		})
-	}
+// releaseSemaphore releases a semaphore slot.
+func releaseSemaphore(sem chan struct{}) {
+	<-sem
 }
+
+// recoverFromPanic recovers from panics silently.
+func recoverFromPanic() {
+	_ = recover()
+}
+

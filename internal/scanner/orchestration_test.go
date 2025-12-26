@@ -26,7 +26,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 )
 
@@ -34,7 +34,7 @@ type MockWriter struct {
 	buffer bytes.Buffer
 }
 
-func (mw *MockWriter) WriteResults(plugin string, results []utils.PluginEntry) {
+func (mw *MockWriter) WriteResults(plugin string, results []file.PluginEntry) {
 	data, _ := json.Marshal(results)
 	mw.buffer.Write(data)
 }
@@ -147,7 +147,7 @@ func TestScanSite_ErrorInFetchingFile(t *testing.T) {
 func ScanSiteWithMocks(
 	target string,
 	opts ScanOptions,
-	writer utils.WriterInterface,
+	writer file.WriterInterface,
 	getEmbeddedFile func(string) ([]byte, error),
 	getVulnsForPlugin func(string, string) []wordfence.Vulnerability,
 ) {
@@ -161,7 +161,7 @@ func ScanSiteWithMocks(
 		version := "1.0.0"
 		vulns := getVulnsForPlugin(plugin, version)
 		for _, vuln := range vulns {
-			writer.WriteResults(plugin, []utils.PluginEntry{
+			writer.WriteResults(plugin, []file.PluginEntry{
 				{
 					Plugin:   plugin,
 					Version:  version,
@@ -172,3 +172,4 @@ func ScanSiteWithMocks(
 		}
 	}
 }
+

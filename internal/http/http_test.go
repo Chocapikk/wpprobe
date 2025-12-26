@@ -17,7 +17,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package http
 
 import (
 	"net/http"
@@ -79,7 +79,7 @@ func TestHTTPClientManager_Get(t *testing.T) {
 			mockServer := httptest.NewServer(tt.serverFunc)
 			defer mockServer.Close()
 
-			client := NewHTTPClient(5*time.Second, nil, "")
+			client := NewHTTPClient(5*time.Second, nil, "", 0)
 
 			got, err := client.Get(mockServer.URL)
 

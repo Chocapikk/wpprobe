@@ -22,40 +22,21 @@ package wordfence
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
+	nethttp "net/http"
 	"strings"
 	"time"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
-)
-
-var (
-	cachedVulnerabilities []Vulnerability
-	cacheLoaded           bool
+	"github.com/Chocapikk/wpprobe/internal/logger"
+	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 )
 
 const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v2/vulnerabilities/production"
 
-type Vulnerability struct {
-	Title           string  `json:"title"`
-	Slug            string  `json:"slug"`
-	SoftwareType    string  `json:"type"`
-	AffectedVersion string  `json:"affected_version"`
-	FromVersion     string  `json:"from_version"`
-	FromInclusive   bool    `json:"from_inclusive"`
-	ToVersion       string  `json:"to_version"`
-	ToInclusive     bool    `json:"to_inclusive"`
-	Severity        string  `json:"severity"`
-	CVE             string  `json:"cve"`
-	CVELink         string  `json:"cve_link"`
-	AuthType        string  `json:"auth_type"`
-	CVSSScore       float64 `json:"cvss_score"`
-	CVSSVector      string  `json:"cvss_vector"`
-}
+// Vulnerability is an alias for the common vulnerability type.
+type Vulnerability = vulnerability.Vulnerability
 
 func UpdateWordfence() error {
-	utils.DefaultLogger.Info("Fetching Wordfence data...")
+	logger.DefaultLogger.Info("Fetching Wordfence data...")
 
 	data, err := fetchWordfenceData()
 	if err != nil {
@@ -63,21 +44,21 @@ func UpdateWordfence() error {
 		return err
 	}
 
-	utils.DefaultLogger.Info("Processing vulnerabilities...")
+	logger.DefaultLogger.Info("Processing vulnerabilities...")
 	vulnerabilities := processWordfenceData(data)
 
-	utils.DefaultLogger.Info("Saving vulnerabilities to file...")
-	if err := saveVulnerabilitiesToFile(vulnerabilities); err != nil {
-		utils.DefaultLogger.Error("Failed to save Wordfence data: " + err.Error())
+	logger.DefaultLogger.Info("Saving vulnerabilities to file...")
+	if err := vulnerability.SaveVulnerabilitiesToFile(vulnerabilities, "wordfence_vulnerabilities.json", "Wordfence"); err != nil {
+		logger.DefaultLogger.Error("Failed to save Wordfence data: " + err.Error())
 		return err
 	}
 
-	utils.DefaultLogger.Success("Wordfence data updated successfully!")
+	logger.DefaultLogger.Success("Wordfence data updated successfully!")
 	return nil
 }
 
 func fetchWordfenceData() (map[string]interface{}, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &nethttp.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get(wordfenceAPI)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
@@ -85,16 +66,16 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
-	case http.StatusOK:
-		utils.DefaultLogger.Info("Decoding JSON data... This may take some time.")
+	case nethttp.StatusOK:
+		logger.DefaultLogger.Info("Decoding JSON data... This may take some time.")
 		var data map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 			return nil, fmt.Errorf("JSON decoding error: %w", err)
 		}
-		utils.DefaultLogger.Success("Successfully retrieved and processed Wordfence data.")
+		logger.DefaultLogger.Success("Successfully retrieved and processed Wordfence data.")
 		return data, nil
 
-	case http.StatusTooManyRequests:
+	case nethttp.StatusTooManyRequests:
 		retryAfter := resp.Header.Get("Retry-After")
 		if retryAfter == "" {
 			retryAfter = "a few minutes"
@@ -105,7 +86,7 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 		return nil, fmt.Errorf(
 			"unexpected API status: %d %s",
 			resp.StatusCode,
-			http.StatusText(resp.StatusCode),
+			nethttp.StatusText(resp.StatusCode),
 		)
 	}
 }
@@ -113,19 +94,19 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 func handleFetchError(err error) {
 	switch {
 	case strings.Contains(err.Error(), "429"):
-		utils.DefaultLogger.Warning(
+		logger.DefaultLogger.Warning(
 			"Wordfence API rate limit hit (429). Please wait before retrying.",
 		)
 	default:
-		utils.DefaultLogger.Error("Failed to retrieve Wordfence data: " + err.Error())
+		logger.DefaultLogger.Error("Failed to retrieve Wordfence data: " + err.Error())
 	}
 }
 
 func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 	var vulnerabilities []Vulnerability
 
-	for _, vulnerability := range wfData {
-		vulnMap, ok := vulnerability.(map[string]interface{})
+	for _, vulnData := range wfData {
+		vulnMap, ok := vulnData.(map[string]interface{})
 		if !ok {
 			continue
 		}
@@ -147,26 +128,9 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 			}
 		}
 
-		if cvssVector != "" {
-			switch {
-			case strings.Contains(cvssVector, "PR:N"):
-				authType = "Unauth"
-			case strings.Contains(cvssVector, "PR:L"):
-				authType = "Auth"
-			case strings.Contains(cvssVector, "PR:H"):
-				authType = "Privileged"
-			}
-		}
-
+		authType = vulnerability.DetermineAuthTypeFromCVSS(cvssVector)
 		if authType == "" {
-			lowerTitle := strings.ToLower(title)
-			if strings.Contains(lowerTitle, "unauth") {
-				authType = "Unauth"
-			} else if strings.Contains(lowerTitle, "auth") {
-				authType = "Auth"
-			} else {
-				authType = "Unknown"
-			}
+			authType = vulnerability.DetermineAuthTypeFromTitle(title)
 		}
 
 		for _, software := range vulnMap["software"].([]interface{}) {
@@ -223,87 +187,6 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 					CVSSVector:      cvssVector,
 				}
 
-				vulnerabilities = append(vulnerabilities, vuln)
-			}
-		}
-	}
-
-	return vulnerabilities
-}
-
-func saveVulnerabilitiesToFile(vulnerabilities []Vulnerability) error {
-	outputPath, err := utils.GetStoragePath("wordfence_vulnerabilities.json")
-	if err != nil {
-		utils.DefaultLogger.Error("Error getting storage path: " + err.Error())
-		return err
-	}
-
-	file, err := os.Create(outputPath)
-	if err != nil {
-		utils.DefaultLogger.Error("Error saving file: " + err.Error())
-		return err
-	}
-	defer func() { _ = file.Close() }()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-
-	if err := encoder.Encode(vulnerabilities); err != nil {
-		utils.DefaultLogger.Error("Error encoding JSON: " + err.Error())
-		return err
-	}
-
-	utils.DefaultLogger.Success("Wordfence data saved in " + outputPath)
-	return nil
-}
-
-func LoadVulnerabilities(filename string) ([]Vulnerability, error) {
-	if cacheLoaded {
-		return cachedVulnerabilities, nil
-	}
-
-	filePath, err := utils.GetStoragePath(filename)
-	if err != nil {
-		utils.DefaultLogger.Warning("Failed to get storage path: " + err.Error())
-		return []Vulnerability{}, err
-	}
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		utils.DefaultLogger.Warning("Failed to read Wordfence JSON: " + err.Error())
-		utils.DefaultLogger.Info(
-			"Run 'wpprobe update-db' to fetch the latest vulnerability database.",
-		)
-		utils.DefaultLogger.Warning(
-			"The scan will proceed, but vulnerabilities will not be displayed.",
-		)
-		return []Vulnerability{}, err
-	}
-
-	if err := json.Unmarshal(data, &cachedVulnerabilities); err != nil {
-		utils.DefaultLogger.Warning("JSON unmarshal error: " + err.Error())
-		return []Vulnerability{}, err
-	}
-
-	cacheLoaded = true
-	return cachedVulnerabilities, nil
-}
-
-func GetVulnerabilitiesForPlugin(plugin string, version string) []Vulnerability {
-	vulnerabilities := []Vulnerability{}
-
-	data, err := LoadVulnerabilities("wordfence_vulnerabilities.json")
-	if err != nil {
-		return vulnerabilities
-	}
-
-	for _, vuln := range data {
-		if vuln.CVE == "" {
-			continue
-		}
-
-		if vuln.Slug == plugin {
-			if utils.IsVersionVulnerable(version, vuln.FromVersion, vuln.ToVersion) {
 				vulnerabilities = append(vulnerabilities, vuln)
 			}
 		}

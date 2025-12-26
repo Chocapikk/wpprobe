@@ -25,7 +25,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 )
 
 func TestUpdateWordfence(t *testing.T) {
@@ -34,7 +35,7 @@ func TestUpdateWordfence(t *testing.T) {
 		t.Errorf("UpdateWordfence() returned error: %v", err)
 	}
 
-	outputPath, _ := utils.GetStoragePath("wordfence_vulnerabilities.json")
+	outputPath, _ := file.GetStoragePath("wordfence_vulnerabilities.json")
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		t.Errorf("Expected file %s to be created", outputPath)
 	}
@@ -101,12 +102,12 @@ func Test_saveVulnerabilitiesToFile(t *testing.T) {
 		},
 	}
 
-	err := saveVulnerabilitiesToFile(vulnerabilities)
+	err := vulnerability.SaveVulnerabilitiesToFile(vulnerabilities, "wordfence_vulnerabilities.json", "Wordfence")
 	if err != nil {
-		t.Errorf("saveVulnerabilitiesToFile() error = %v, want nil", err)
+		t.Errorf("SaveVulnerabilitiesToFile() error = %v, want nil", err)
 	}
 
-	outputPath, _ := utils.GetStoragePath("wordfence_vulnerabilities.json")
+	outputPath, _ := file.GetStoragePath("wordfence_vulnerabilities.json")
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
 		t.Errorf("Expected file %s to be created", outputPath)
 	}
@@ -124,7 +125,7 @@ func Test_LoadVulnerabilities(t *testing.T) {
 		},
 	}
 
-	outputPath, err := utils.GetStoragePath("wordfence_vulnerabilities.json")
+	outputPath, err := file.GetStoragePath("wordfence_vulnerabilities.json")
 	if err != nil {
 		t.Fatalf("Failed to get storage path: %v", err)
 	}
@@ -139,7 +140,7 @@ func Test_LoadVulnerabilities(t *testing.T) {
 		t.Fatalf("Failed to encode vulnerabilities: %v", err)
 	}
 
-	loadedVulns, err := LoadVulnerabilities("wordfence_vulnerabilities.json")
+	loadedVulns, err := vulnerability.LoadWordfenceVulnerabilities()
 	if err != nil {
 		t.Fatalf("Failed to load vulnerabilities: %v", err)
 	}
@@ -167,7 +168,7 @@ func TestGetVulnerabilitiesForPlugin(t *testing.T) {
 		},
 	}
 
-	outputPath, err := utils.GetStoragePath("wordfence_vulnerabilities.json")
+	outputPath, err := file.GetStoragePath("wordfence_vulnerabilities.json")
 	if err != nil {
 		t.Fatalf("Failed to get storage path: %v", err)
 	}
@@ -182,10 +183,7 @@ func TestGetVulnerabilitiesForPlugin(t *testing.T) {
 		t.Fatalf("Failed to encode vulnerabilities: %v", err)
 	}
 
-	cachedVulnerabilities = nil
-	cacheLoaded = false
-
-	got := GetVulnerabilitiesForPlugin("test-plugin", "1.5.0")
+	got := vulnerability.GetWordfenceVulnerabilitiesForPlugin("test-plugin", "1.5.0")
 
 	if len(got) == 0 {
 		t.Fatalf("Expected at least 1 vulnerability, got 0")

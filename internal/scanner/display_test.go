@@ -24,12 +24,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/charmbracelet/lipgloss"
 )
 
 func Test_buildPluginVulns(t *testing.T) {
-	entries := []utils.PluginEntry{
+	entries := []file.PluginEntry{
 		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}},
 		{Plugin: "plugin1", Severity: "high", CVEs: []string{"CVE-2"}},
 		{Plugin: "plugin2", Severity: "medium", CVEs: []string{"CVE-3"}},
@@ -50,7 +50,7 @@ func Test_buildPluginVulns(t *testing.T) {
 }
 
 func Test_buildPluginAuthGroups(t *testing.T) {
-	entries := []utils.PluginEntry{
+	entries := []file.PluginEntry{
 		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}, AuthType: "Unauth"},
 		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-2"}, AuthType: "Auth"},
 		{Plugin: "plugin1", Severity: "high", CVEs: []string{"CVE-3"}, AuthType: "Unknown"},

@@ -21,10 +21,13 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/Chocapikk/wpprobe/internal/search"
-	"github.com/Chocapikk/wpprobe/internal/wordfence"
+	"github.com/Chocapikk/wpprobe/internal/severity"
+	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 	"github.com/charmbracelet/lipgloss/tree"
 	"github.com/spf13/cobra"
 )
@@ -59,12 +62,12 @@ func init() {
 
 func runSearch(cmd *cobra.Command, args []string) error {
 	if !search.AnyFilterSet(flagCVE, flagPlugin, flagTitle, flagSeverity, flagAuth) {
-		return fmt.Errorf(
-			"please specify at least one filter: --cve, --plugin, --title, --severity, or --auth",
-		)
+		errMsg := "please specify at least one filter: --cve, --plugin, --title, --severity, or --auth"
+		logger.DefaultLogger.Error(errMsg)
+		return fmt.Errorf(errMsg)
 	}
 
-	vulns, err := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
+	vulns, err := vulnerability.LoadWordfenceVulnerabilities()
 	if err != nil {
 		return err
 	}
@@ -74,13 +77,45 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		fmt.Println(scanner.UnknownStyle.Render("No vulnerabilities match filters."))
 		return nil
 	}
-	byPlugin := search.GroupByPlugin(filtered)
 
-	root := tree.Root(
-		scanner.TitleStyle.Render(fmt.Sprintf("🔍 %d vulnerabilities found", len(filtered))),
-	)
+	byPlugin := search.GroupByPlugin(filtered)
+	summary := buildSearchSummary(filtered, byPlugin)
+
+	root := tree.Root(scanner.TitleStyle.Render(summary))
 	search.BuildTree(root, byPlugin, showDetails)
 
 	fmt.Println(scanner.SeparatorStyle.Render(root.String()))
 	return nil
+}
+
+func buildSearchSummary(filtered []vulnerability.Vulnerability, byPlugin map[string][]vulnerability.Vulnerability) string {
+	totalVulns := len(filtered)
+	totalPlugins := len(byPlugin)
+
+	counts := countSeverities(filtered)
+	parts := []string{
+		fmt.Sprintf("🔍 %d vulnerabilities", totalVulns),
+		fmt.Sprintf("%d plugins", totalPlugins),
+		formatCountSummary(counts),
+	}
+
+	return strings.Join(parts, " | ")
+}
+
+func countSeverities(vulns []vulnerability.Vulnerability) map[string]int {
+	severities := make([]string, len(vulns))
+	for i, v := range vulns {
+		severities[i] = v.Severity
+	}
+	return severity.CountBySeverity(severities)
+}
+
+func formatCountSummary(counts map[string]int) string {
+	parts := []string{
+		fmt.Sprintf("%s:%d", scanner.CriticalStyle.Render("C"), counts["critical"]),
+		fmt.Sprintf("%s:%d", scanner.HighStyle.Render("H"), counts["high"]),
+		fmt.Sprintf("%s:%d", scanner.MediumStyle.Render("M"), counts["medium"]),
+		fmt.Sprintf("%s:%d", scanner.LowStyle.Render("L"), counts["low"]),
+	}
+	return strings.Join(parts, " ")
 }

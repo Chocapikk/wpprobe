@@ -17,19 +17,21 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package http
 
 import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/corpix/uarand"
 )
 
@@ -40,12 +42,13 @@ var maxResponseSize = maxResponseSizeMB * 1024 * 1024
 const maxRedirects = 10
 
 type HTTPClientManager struct {
-	client    *http.Client
-	userAgent string
-	headers   []string
+	client     *http.Client
+	userAgent  string
+	headers    []string
+	rateLimiter *RateLimiter
 }
 
-func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string) *HTTPClientManager {
+func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps int) *HTTPClientManager {
 	transport := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true,
@@ -55,6 +58,7 @@ func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string) *HT
 	if proxyURL != "" {
 		proxy, err := url.Parse(proxyURL)
 		if err != nil {
+			logger.DefaultLogger.Warning(fmt.Sprintf("Invalid proxy URL %q: %v, ignoring proxy", proxyURL, err))
 		} else {
 			transport.Proxy = http.ProxyURL(proxy)
 		}
@@ -72,51 +76,60 @@ func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string) *HT
 	}
 
 	return &HTTPClientManager{
-		client:    client,
-		userAgent: uarand.GetRandom(),
-		headers:   headers,
+		client:      client,
+		userAgent:   uarand.GetRandom(),
+		headers:     headers,
+		rateLimiter: NewRateLimiter(rps),
 	}
 }
 
-func (h *HTTPClientManager) Get(url string) (string, error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", errors.New("failed to create request: " + err.Error())
-	}
-
+func (h *HTTPClientManager) parseHeaders() (map[string]string, bool) {
+	headers := make(map[string]string)
 	hasUA := false
+
 	for _, hdr := range h.headers {
 		parts := strings.SplitN(hdr, ":", 2)
 		if len(parts) != 2 {
 			continue
 		}
 		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
 		if strings.EqualFold(key, "User-Agent") {
-			req.Header.Add("User-Agent", strings.TrimSpace(parts[1]))
 			hasUA = true
 		}
+		headers[key] = value
 	}
 
-	if !hasUA {
+	return headers, hasUA
+}
+
+func (h *HTTPClientManager) Get(url string) (string, error) {
+	if h.rateLimiter != nil {
+		h.rateLimiter.Wait()
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	parsedHeaders, hasUA := h.parseHeaders()
+
+	if hasUA {
+		req.Header.Set("User-Agent", parsedHeaders["User-Agent"])
+	} else {
 		req.Header.Set("User-Agent", h.userAgent)
 	}
 
-	for _, hdr := range h.headers {
-		parts := strings.SplitN(hdr, ":", 2)
-		if len(parts) != 2 {
-			continue
+	for key, value := range parsedHeaders {
+		if !strings.EqualFold(key, "User-Agent") {
+			req.Header.Add(key, value)
 		}
-		key := strings.TrimSpace(parts[0])
-		if strings.EqualFold(key, "User-Agent") {
-			continue
-		}
-		value := strings.TrimSpace(parts[1])
-		req.Header.Add(key, value)
 	}
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return "", errors.New("request failed: " + err.Error())
+		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -127,23 +140,23 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 		}
 		location, err := resp.Location()
 		if err != nil {
-			return "", errors.New("failed to get redirect location")
+			return "", fmt.Errorf("failed to get redirect location: %w", err)
 		}
 		resp, err = h.client.Get(location.String())
 		if err != nil {
-			return "", errors.New("redirect request failed: " + err.Error())
+			return "", fmt.Errorf("redirect request failed: %w", err)
 		}
 		redirects++
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", errors.New("non-success status code: " + resp.Status)
+		return "", fmt.Errorf("non-success status code: %s", resp.Status)
 	}
 
 	limited := io.LimitReader(resp.Body, int64(maxResponseSize))
 	data, err := io.ReadAll(limited)
 	if err != nil {
-		return "", errors.New("failed to read response body: " + err.Error())
+		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if len(data) == 0 {

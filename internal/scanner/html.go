@@ -25,13 +25,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
 	"golang.org/x/net/html"
+
+	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-func discoverPluginsFromHTML(target string, headers []string, proxyURL string) ([]string, error) {
-	normalized := utils.NormalizeURL(target)
-	client := utils.NewHTTPClient(10*time.Second, headers, proxyURL)
+func discoverPluginsFromHTML(target string, headers []string, proxyURL string, rps int) ([]string, error) {
+	normalized := http.NormalizeURL(target)
+	client := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps)
 
 	slugsSet := make(map[string]struct{})
 

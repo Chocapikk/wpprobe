@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-func fetchEndpointsFromPath(target, path string, httpClient *utils.HTTPClientManager) []string {
+func fetchEndpointsFromPath(target, path string, httpClient *http.HTTPClientManager) []string {
 	response, err := httpClient.Get(target + path)
 	if err != nil {
 		return []string{}
@@ -51,8 +51,8 @@ func fetchEndpointsFromPath(target, path string, httpClient *utils.HTTPClientMan
 	return endpoints
 }
 
-func FetchEndpoints(target string, headers []string, proxyURL string) []string {
-	httpClient := utils.NewHTTPClient(10*time.Second, headers, proxyURL)
+func FetchEndpoints(target string, headers []string, proxyURL string, rps int) []string {
+	httpClient := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps)
 
 	endpointsChan := make(chan []string, 2)
 	var wg sync.WaitGroup
@@ -61,17 +61,10 @@ func FetchEndpoints(target string, headers []string, proxyURL string) []string {
 
 	for _, path := range paths {
 		wg.Add(1)
-		go func(p string) {
-			defer wg.Done()
-			endpoints := fetchEndpointsFromPath(target, p, httpClient)
-			endpointsChan <- endpoints
-		}(path)
+		go fetchEndpointsWorker(target, path, httpClient, endpointsChan, &wg)
 	}
 
-	go func() {
-		wg.Wait()
-		close(endpointsChan)
-	}()
+	go closeEndpointsChannel(&wg, endpointsChan)
 
 	uniqueEndpoints := make(map[string]struct{})
 	for epList := range endpointsChan {
@@ -86,4 +79,21 @@ func FetchEndpoints(target string, headers []string, proxyURL string) []string {
 	}
 
 	return finalEndpoints
+}
+
+func fetchEndpointsWorker(
+	target string,
+	path string,
+	httpClient *http.HTTPClientManager,
+	endpointsChan chan []string,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	endpoints := fetchEndpointsFromPath(target, path, httpClient)
+	endpointsChan <- endpoints
+}
+
+func closeEndpointsChannel(wg *sync.WaitGroup, endpointsChan chan []string) {
+	wg.Wait()
+	close(endpointsChan)
 }

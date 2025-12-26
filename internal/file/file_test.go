@@ -17,7 +17,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package file
 
 import (
 	"encoding/csv"
@@ -172,9 +172,9 @@ func TestGetWriter(t *testing.T) {
 		outputFile string
 		wantType   string
 	}{
-		{"CSV format", "output.csv", "*utils.CSVWriter"},
-		{"JSON format", "output.json", "*utils.JSONWriter"},
-		{"Unsupported format", "output.txt", "*utils.CSVWriter"}, // Defaults to CSV
+		{"CSV format", "output.csv", "*file.CSVWriter"},
+		{"JSON format", "output.json", "*file.JSONWriter"},
+		{"Unsupported format", "output.txt", "*file.CSVWriter"}, // Defaults to CSV
 	}
 
 	for _, tt := range tests {

@@ -26,90 +26,6 @@ import (
 	"testing"
 )
 
-func TestLoadPluginEndpointsFromData(t *testing.T) {
-	tests := []struct {
-		name    string
-		data    []byte
-		want    map[string][]string
-		wantErr bool
-	}{
-		{
-			name: "Valid JSON data",
-			data: []byte(`{"plugin1": ["/endpoint1", "/endpoint2"], "plugin2": ["/endpoint3"]}`),
-			want: map[string][]string{
-				"plugin1": {"/endpoint1", "/endpoint2"},
-				"plugin2": {"/endpoint3"},
-			},
-		},
-		{
-			name: "Invalid JSON data",
-			data: []byte(`{"plugin1": ["/endpoint1", "/endpoint2",]}`),
-			want: map[string][]string{},
-		},
-		{
-			name: "Empty data",
-			data: []byte(``),
-			want: map[string][]string{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := LoadPluginEndpointsFromData(tt.data)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoadPluginEndpointsFromData() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("LoadPluginEndpointsFromData() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-type compareDetection struct {
-	Plugins  map[string]PluginData
-	Detected []string
-}
-
-func toCompare(d PluginDetectionResult) compareDetection {
-	res := compareDetection{
-		Plugins:  make(map[string]PluginData),
-		Detected: append([]string(nil), d.Detected...),
-	}
-	sort.Strings(res.Detected)
-	for k, v := range d.Plugins {
-		if v != nil {
-			tmp := *v
-			sort.Strings(tmp.Matches)
-			res.Plugins[k] = tmp
-		}
-	}
-	return res
-}
-
-func compareDetections(a, b compareDetection) bool {
-	if !reflect.DeepEqual(a.Detected, b.Detected) {
-		return false
-	}
-	if len(a.Plugins) != len(b.Plugins) {
-		return false
-	}
-	for k, va := range a.Plugins {
-		vb, ok := b.Plugins[k]
-		if !ok {
-			return false
-		}
-		if va.Score != vb.Score || va.Ambiguous != vb.Ambiguous ||
-			!reflect.DeepEqual(va.Matches, vb.Matches) {
-			return false
-		}
-		if fmt.Sprintf("%.2f", va.Confidence) != fmt.Sprintf("%.2f", vb.Confidence) {
-			return false
-		}
-	}
-	return true
-}
-
 func TestDetectPlugins(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -187,3 +103,68 @@ func TestDetectPlugins(t *testing.T) {
 		})
 	}
 }
+
+type compareValue struct {
+	Plugins  map[string]comparePlugin
+	Detected []string
+}
+
+type comparePlugin struct {
+	Score      int
+	Confidence float64
+	Ambiguous  bool
+	Matches    []string
+}
+
+func toCompare(r PluginDetectionResult) compareValue {
+	cv := compareValue{
+		Plugins:  make(map[string]comparePlugin),
+		Detected: append([]string(nil), r.Detected...),
+	}
+	sort.Strings(cv.Detected)
+	for k, v := range r.Plugins {
+		if v != nil {
+			cv.Plugins[k] = comparePlugin{
+				Score:      v.Score,
+				Confidence: v.Confidence,
+				Ambiguous:  v.Ambiguous,
+				Matches:    append([]string(nil), v.Matches...),
+			}
+		}
+	}
+	return cv
+}
+
+func compareDetections(got, want compareValue) bool {
+	if len(got.Plugins) != len(want.Plugins) {
+		return false
+	}
+	sort.Strings(got.Detected)
+	sort.Strings(want.Detected)
+	if !reflect.DeepEqual(got.Detected, want.Detected) {
+		return false
+	}
+	for k, v := range want.Plugins {
+		gv, ok := got.Plugins[k]
+		if !ok {
+			return false
+		}
+		if gv.Score != v.Score {
+			return false
+		}
+		if fmt.Sprintf("%.2f", gv.Confidence) !=
+			fmt.Sprintf("%.2f", v.Confidence) {
+			return false
+		}
+		if gv.Ambiguous != v.Ambiguous {
+			return false
+		}
+		sort.Strings(gv.Matches)
+		sort.Strings(v.Matches)
+		if !reflect.DeepEqual(gv.Matches, v.Matches) {
+			return false
+		}
+	}
+	return true
+}
+

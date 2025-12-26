@@ -20,11 +20,13 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
+	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
-	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -54,30 +56,32 @@ var scanCmd = &cobra.Command{
 	Use:   "scan",
 	Short: "Scan a WordPress site for installed plugins and vulnerabilities",
 	Long:  `Scans a WordPress site to detect installed plugins and check for known vulnerabilities using the Wordfence database.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		outputFile := cmd.Flag("output").Value.String()
-		outputFormat := utils.DetectOutputFormat(outputFile)
+		outputFormat := file.DetectOutputFormat(outputFile)
 
 		headers, _ := cmd.Flags().GetStringArray("header")
 
 		proxyURL := cmd.Flag("proxy").Value.String()
 
 		if strings.TrimSpace(proxyURL) != "" {
-			utils.DefaultLogger.Info("Using given proxy: " + proxyURL)
+			logger.DefaultLogger.Info("Using given proxy: " + proxyURL)
 		} else {
-			utils.DefaultLogger.Info("No proxy URL provided, checking environment variables")
+			logger.DefaultLogger.Info("No proxy URL provided, checking environment variables")
 			if envProxy, from := getProxyFromEnv(); envProxy != "" {
 				proxyURL = envProxy
-				utils.DefaultLogger.Info("Using proxy from " + from + ": " + proxyURL)
+				logger.DefaultLogger.Info("Using proxy from " + from + ": " + proxyURL)
 			} else {
 				noProxy := firstNonEmpty(os.Getenv("NO_PROXY"), os.Getenv("no_proxy"))
 				if noProxy != "" {
-					utils.DefaultLogger.Info("No explicit proxy; NO_PROXY is set: " + noProxy)
+					logger.DefaultLogger.Info("No explicit proxy; NO_PROXY is set: " + noProxy)
 				} else {
-					utils.DefaultLogger.Info("No proxy configured; using direct connection")
+					logger.DefaultLogger.Info("No proxy configured; using direct connection")
 				}
 			}
 		}
+
+		rateLimit := mustInt(cmd.Flags().GetInt("rate-limit"))
 
 		opts := scanner.ScanOptions{
 			URL:            cmd.Flag("url").Value.String(),
@@ -91,14 +95,16 @@ var scanCmd = &cobra.Command{
 			PluginList:     cmd.Flag("plugin-list").Value.String(),
 			Headers:        headers,
 			Proxy:          proxyURL,
+			RateLimit:      rateLimit,
 		}
 
 		if opts.URL == "" && opts.File == "" {
-			utils.DefaultLogger.Error("You must provide either --url or --file")
-			os.Exit(1)
+			logger.DefaultLogger.Error("You must provide either --url or --file")
+			return fmt.Errorf("you must provide either --url or --file")
 		}
 
 		scanner.ScanTargets(opts)
+		return nil
 	},
 }
 
@@ -115,11 +121,13 @@ func init() {
 	scanCmd.Flags().
 		StringArrayP("header", "H", []string{}, "HTTP header to include in requests. Can be specified multiple times.")
 	scanCmd.Flags().String("proxy", "", "HTTP/HTTPS proxy URL (e.g., http://127.0.0.1:8080)")
+	scanCmd.Flags().
+		Int("rate-limit", 0, "Maximum requests per second (0 = unlimited). Use to avoid overwhelming targets.")
 }
 
 func mustBool(value bool, err error) bool {
 	if err != nil {
-		utils.DefaultLogger.Warning("Failed to parse boolean flag, defaulting to false")
+		logger.DefaultLogger.Warning("Failed to parse boolean flag, defaulting to false")
 		return false
 	}
 	return value
@@ -127,7 +135,7 @@ func mustBool(value bool, err error) bool {
 
 func mustInt(value int, err error) int {
 	if err != nil {
-		utils.DefaultLogger.Warning("Failed to parse integer flag, defaulting to 10")
+		logger.DefaultLogger.Warning("Failed to parse integer flag, defaulting to 10")
 		return 10
 	}
 	return value

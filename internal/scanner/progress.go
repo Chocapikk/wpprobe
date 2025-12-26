@@ -17,24 +17,49 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package cmd
+package scanner
 
 import (
-	"github.com/Chocapikk/wpprobe/internal/logger"
-	"github.com/Chocapikk/wpprobe/internal/version"
-	"github.com/spf13/cobra"
+	"github.com/Chocapikk/wpprobe/internal/progress"
 )
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update WPProbe to the latest version",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		current := version.Version
-		if err := version.AutoUpdate(current); err != nil {
-			logger.DefaultLogger.Error("Update failed: " + err.Error())
-			return err
-		}
-		logger.DefaultLogger.Success("Update completed successfully!")
-		return nil
-	},
+func isFileScan(opts ScanOptions) bool {
+	return opts.File != ""
 }
+
+func clearProgressLine(progress *progress.ProgressManager, isFileScan bool) {
+	if progress != nil && !isFileScan {
+		progress.ClearLine()
+	}
+}
+
+func setProgressMessage(progress *progress.ProgressManager, isFileScan bool, message string) {
+	if progress != nil && !isFileScan {
+		progress.SetMessage(message)
+	}
+}
+
+func finishProgressIfNeeded(progress *progress.ProgressManager) {
+	if progress != nil {
+		progress.Finish()
+	}
+}
+
+func setupBruteforceProgress(ctx BruteforceProgressContext) *progress.ProgressManager {
+	if ctx.ParentProgress == nil {
+		return progress.NewProgressBar(ctx.PluginCount, "🔎 Bruteforcing plugins...")
+	}
+
+	if ctx.Opts.File == "" {
+		ctx.ParentProgress.SetTotal(ctx.PluginCount)
+		ctx.ParentProgress.SetMessage("🔎 Bruteforcing plugins...")
+	}
+	return ctx.ParentProgress
+}
+
+func finishBruteforceProgress(progress *progress.ProgressManager, opts ScanOptions) {
+	if progress != nil && opts.File == "" {
+		progress.Finish()
+	}
+}
+

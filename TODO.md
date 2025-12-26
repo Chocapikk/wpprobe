@@ -15,6 +15,7 @@
 - [ ] **Create `config` command** for API keys management with secure storage.
 - [ ] **Implement theme detection** (even if unlikely, some themes may expose endpoints).
 - [x] **Hybrid scan mode**: Start with stealthy mode, then skip already found plugins during fuzzing to optimize speed and stealth.
+- [x] **Rate limiting system**: Add requests per second (RPS) limit to prevent overwhelming targets and respect server limits. Implemented via token bucket limiter in HTTPClientManager. Added `--rate-limit` flag to control request rate. (Issue #11)
 
 ---
 

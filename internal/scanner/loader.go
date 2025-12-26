@@ -24,23 +24,31 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/logger"
 )
 
-type PluginData struct {
-	Score      int
-	Confidence float64
-	Ambiguous  bool
-	Matches    []string
+// LoadPluginsFromFile loads a list of plugins from an embedded file or a user-specified file.
+func LoadPluginsFromFile(filename string) ([]string, error) {
+	if filename == "" {
+		data, err := file.GetEmbeddedFile("files/wordpress_plugins.txt")
+		if err != nil {
+			return nil, fmt.Errorf("failed to load default plugin list: %w", err)
+		}
+		var plugins []string
+		scanner := bufio.NewScanner(bytes.NewReader(data))
+		for scanner.Scan() {
+			if line := scanner.Text(); line != "" {
+				plugins = append(plugins, line)
+			}
+		}
+		return plugins, nil
+	}
+	return file.ReadLines(filename)
 }
 
-type PluginDetectionResult struct {
-	Plugins  map[string]*PluginData
-	Detected []string
-}
-
+// LoadPluginEndpointsFromData loads plugin endpoints from JSONL data.
 func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 	pluginEndpoints := make(map[string][]string)
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -55,64 +63,9 @@ func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		utils.DefaultLogger.Error("Error reading embedded JSONL data: " + err.Error())
+		logger.DefaultLogger.Error("Error reading embedded JSONL data: " + err.Error())
 		return nil, err
 	}
 	return pluginEndpoints, nil
 }
 
-func DetectPlugins(
-	detectedEndpoints []string,
-	pluginEndpoints map[string][]string,
-) PluginDetectionResult {
-	detection := PluginDetectionResult{
-		Plugins: make(map[string]*PluginData),
-	}
-
-	for plugin, knownRoutes := range pluginEndpoints {
-		if len(knownRoutes) == 0 {
-			continue
-		}
-		var matchCount int
-		for _, knownRoute := range knownRoutes {
-			for _, endpoint := range detectedEndpoints {
-				if endpoint == knownRoute {
-					matchCount++
-				}
-			}
-		}
-
-		if matchCount > 0 {
-			confidence := (float64(matchCount) / float64(len(knownRoutes))) * 100
-			confidence = math.Round(confidence*100) / 100
-			detection.Plugins[plugin] = &PluginData{
-				Score:      matchCount,
-				Confidence: confidence,
-			}
-			detection.Detected = append(detection.Detected, plugin)
-		}
-	}
-
-	ambiguousGroups := make(map[string][]string)
-	pluginEndpointsMap := make(map[string]string)
-	for plugin := range detection.Plugins {
-		key := fmt.Sprintf("%v", pluginEndpoints[plugin])
-		pluginEndpointsMap[plugin] = key
-		ambiguousGroups[key] = append(ambiguousGroups[key], plugin)
-	}
-
-	for _, group := range ambiguousGroups {
-		if len(group) > 1 {
-			for _, pl := range group {
-				detection.Plugins[pl].Ambiguous = true
-				detection.Plugins[pl].Matches = group
-			}
-		} else {
-			for _, pl := range group {
-				detection.Plugins[pl].Matches = []string{}
-			}
-		}
-	}
-
-	return detection
-}

@@ -27,29 +27,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestRunUpdateWordfence_Success(t *testing.T) {
-	originalFunc := updateWordfenceFunc
+func TestRunUpdateDb_Success(t *testing.T) {
+	originalWordfenceFunc := updateWordfenceFunc
+	originalWPScanFunc := updateWPScanFunc
 	updateWordfenceFunc = func() error { return nil }
-	defer func() { updateWordfenceFunc = originalFunc }()
+	updateWPScanFunc = func() error { return nil }
+	defer func() {
+		updateWordfenceFunc = originalWordfenceFunc
+		updateWPScanFunc = originalWPScanFunc
+	}()
 
 	cmd := &cobra.Command{}
-	err := runUpdateWordfence(cmd, []string{})
+	err := runUpdateDb(cmd, []string{})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 }
 
-func TestRunUpdateWordfence_Failure(t *testing.T) {
-	originalFunc := updateWordfenceFunc
+func TestRunUpdateDb_Failure(t *testing.T) {
+	originalWordfenceFunc := updateWordfenceFunc
+	originalWPScanFunc := updateWPScanFunc
 	updateWordfenceFunc = func() error { return errors.New("mock error") }
-	defer func() { updateWordfenceFunc = originalFunc }()
+	updateWPScanFunc = func() error { return nil }
+	defer func() {
+		updateWordfenceFunc = originalWordfenceFunc
+		updateWPScanFunc = originalWPScanFunc
+	}()
 
 	buf := new(bytes.Buffer)
 	cmd := &cobra.Command{}
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 
-	err := runUpdateWordfence(cmd, []string{})
+	err := runUpdateDb(cmd, []string{})
 	if err == nil || err.Error() != "mock error" {
 		t.Errorf("Expected 'mock error', got %v", err)
 	}
@@ -57,26 +67,5 @@ func TestRunUpdateWordfence_Failure(t *testing.T) {
 	output := buf.String()
 	if !bytes.Contains([]byte(output), []byte("mock error")) {
 		t.Errorf("Expected error message in output, got: %s", output)
-	}
-}
-
-func Test_runUpdateWordfence(t *testing.T) {
-	type args struct {
-		cmd  *cobra.Command
-		args []string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := runUpdateWordfence(tt.args.cmd, tt.args.args); (err != nil) != tt.wantErr {
-				t.Errorf("runUpdateWordfence() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
 	}
 }

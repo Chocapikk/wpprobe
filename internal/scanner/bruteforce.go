@@ -20,95 +20,48 @@
 package scanner
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
-	"strings"
 	"sync"
 
-	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/http"
+	"github.com/Chocapikk/wpprobe/internal/logger"
+	"github.com/Chocapikk/wpprobe/internal/progress"
+	"github.com/Chocapikk/wpprobe/internal/version"
 )
-
-// LoadPluginsFromFile loads a list of plugins from an embedded file or a user-specified file.
-func LoadPluginsFromFile(filename string) ([]string, error) {
-	if filename == "" {
-		data, err := utils.GetEmbeddedFile("files/wordpress_plugins.txt")
-		if err != nil {
-			return nil, fmt.Errorf("failed to load default plugin list: %v", err)
-		}
-		var plugins []string
-		scanner := bufio.NewScanner(bytes.NewReader(data))
-		for scanner.Scan() {
-			if line := strings.TrimSpace(scanner.Text()); line != "" {
-				plugins = append(plugins, line)
-			}
-		}
-		return plugins, nil
-	}
-	return utils.ReadLines(filename)
-}
 
 // BruteforcePlugins attempts to detect plugins by parsing their readme.txt for version.
 // It updates the progress bar message with a fixed-width plugin name.
-func BruteforcePlugins(
-	target string,
-	plugins []string,
-	threads int,
-	progress *utils.ProgressManager,
-	headers []string,
-	proxyURL string,
-) []string {
-	if len(plugins) == 0 {
-		utils.DefaultLogger.Warning("No plugins provided for brute-force scan")
+func BruteforcePlugins(req BruteforceRequest) []string {
+	if len(req.Plugins) == 0 {
+		logger.DefaultLogger.Warning("No plugins provided for brute-force scan")
 		return nil
 	}
 
-	normalized := utils.NormalizeURL(target)
-	var (
-		detected []string
-		wg       sync.WaitGroup
-		mu       sync.Mutex
-		sem      = make(chan struct{}, threads)
-	)
+	normalized := http.NormalizeURL(req.Target)
+	var detected []string
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, req.Threads)
 
-	for _, plugin := range plugins {
+	ctx := BruteforceContext{
+		ScanContext: ScanContext{
+			Target:   normalized,
+			Threads:  req.Threads,
+			HTTP:     req.HTTP,
+			Progress: req.Progress,
+		},
+		SyncContext: SyncContext{
+			Mu:  &mu,
+			Wg:  &wg,
+			Sem: sem,
+		},
+		Detected: &detected,
+	}
+
+	for _, plugin := range req.Plugins {
 		wg.Add(1)
 		sem <- struct{}{}
-
-		go func(p string) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			defer func() {
-				if r := recover(); r != nil {
-					utils.DefaultLogger.Error(
-						fmt.Sprintf("Panic while scanning plugin %s: %v", p, r),
-					)
-				}
-			}()
-
-			if progress != nil {
-				progress.SetMessage(fmt.Sprintf("🔎 Bruteforcing plugin %-30.30s", p))
-			}
-
-			version := utils.GetPluginVersion(normalized, p, threads, headers, proxyURL)
-			if version != "" && version != "unknown" {
-				if progress != nil {
-					progress.ClearLine()
-				}
-				utils.DefaultLogger.Info(fmt.Sprintf("Found plugin %s version %s", p, version))
-				if progress != nil {
-					progress.RenderBlank()
-				}
-
-				mu.Lock()
-				detected = append(detected, p)
-				mu.Unlock()
-			}
-
-			if progress != nil {
-				progress.Increment()
-			}
-		}(plugin)
+		go scanPlugin(plugin, ctx)
 	}
 
 	wg.Wait()
@@ -116,33 +69,93 @@ func BruteforcePlugins(
 }
 
 // HybridScan performs a hybrid scan: first stealthy, then brute-forces remaining plugins.
-func HybridScan(
-	target string,
-	stealthyPlugins []string,
-	bruteforcePlugins []string,
-	threads int,
-	progress *utils.ProgressManager,
-	headers []string,
-	proxyURL string,
-) []string {
-	if len(stealthyPlugins) == 0 {
-		return BruteforcePlugins(target, bruteforcePlugins, threads, progress, headers, proxyURL)
+func HybridScan(req HybridScanRequest) []string {
+	bruteReq := BruteforceRequest{
+		Target:   req.Target,
+		Threads:  req.Threads,
+		Progress: req.Progress,
+		HTTP:     req.HTTP,
 	}
 
-	detectedMap := make(map[string]bool, len(stealthyPlugins))
-	for _, p := range stealthyPlugins {
+	if len(req.StealthyPlugins) == 0 {
+		bruteReq.Plugins = req.BruteforcePlugins
+		return BruteforcePlugins(bruteReq)
+	}
+
+	detectedMap := make(map[string]bool, len(req.StealthyPlugins))
+	for _, p := range req.StealthyPlugins {
 		detectedMap[p] = true
 	}
 
 	var remaining []string
-	for _, p := range bruteforcePlugins {
+	for _, p := range req.BruteforcePlugins {
 		if !detectedMap[p] {
 			remaining = append(remaining, p)
 		}
 	}
 
-	brutefound := BruteforcePlugins(target, remaining, threads, progress, headers, proxyURL)
-	result := make([]string, len(stealthyPlugins), len(stealthyPlugins)+len(brutefound))
-	copy(result, stealthyPlugins)
+	bruteReq.Plugins = remaining
+	brutefound := BruteforcePlugins(bruteReq)
+	result := make([]string, len(req.StealthyPlugins), len(req.StealthyPlugins)+len(brutefound))
+	copy(result, req.StealthyPlugins)
 	return append(result, brutefound...)
+}
+
+func scanPlugin(plugin string, ctx BruteforceContext) {
+	defer ctx.Wg.Done()
+	defer releaseSemaphore(ctx.Sem)
+	defer handlePanic(plugin)
+
+	updateProgressMessage(ctx.Progress, plugin)
+
+	version := version.GetPluginVersion(ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit)
+	if version == "" || version == "unknown" {
+		incrementProgress(ctx.Progress)
+		return
+	}
+
+	handlePluginFound(plugin, version, ctx.Progress, ctx.Mu, ctx.Detected)
+	incrementProgress(ctx.Progress)
+}
+
+func handlePanic(plugin string) {
+	if r := recover(); r != nil {
+		logger.DefaultLogger.Error(
+			fmt.Sprintf("Panic while scanning plugin %s: %v", plugin, r),
+		)
+	}
+}
+
+func updateProgressMessage(progress *progress.ProgressManager, plugin string) {
+	if progress == nil {
+		return
+	}
+	progress.SetMessage(fmt.Sprintf("🔎 Bruteforcing plugin %-30.30s", plugin))
+}
+
+func handlePluginFound(
+	plugin string,
+	version string,
+	progress *progress.ProgressManager,
+	mu *sync.Mutex,
+	detected *[]string,
+) {
+	if progress != nil {
+		progress.ClearLine()
+	}
+	logger.DefaultLogger.Info(fmt.Sprintf("Found plugin %s version %s", plugin, version))
+	if progress != nil {
+		progress.RenderBlank()
+	}
+
+	mu.Lock()
+	*detected = append(*detected, plugin)
+	mu.Unlock()
+}
+
+func incrementProgress(progress *progress.ProgressManager) {
+	if progress == nil {
+		return
+	}
+	progress.Increment()
 }

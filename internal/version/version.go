@@ -17,24 +17,24 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package version
 
 import (
+	"encoding/json"
 	"fmt"
-	"net/http"
+	nethttp "net/http"
 	"regexp"
 	"strings"
 	"time"
 
-	"encoding/json"
-
+	"github.com/Chocapikk/wpprobe/internal/http"
 	"github.com/Masterminds/semver"
 )
 
 var tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
 
 func CheckLatestVersion(currentVersion string) (string, bool) {
-	resp, err := http.Get(tagsURL)
+	resp, err := nethttp.Get(tagsURL)
 	if err != nil {
 		return "unknown", false
 	}
@@ -72,15 +72,15 @@ func CheckLatestVersion(currentVersion string) (string, bool) {
 
 func GetPluginVersion(
 	target, plugin string,
-	threads int,
 	headers []string,
 	proxyURL string,
+	rps int,
 ) string {
-	httpClient := NewHTTPClient(10*time.Second, headers, proxyURL)
+	httpClient := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps)
 	return fetchVersionFromReadme(httpClient, target, plugin)
 }
 
-func fetchVersionFromReadme(client *HTTPClientManager, target, plugin string) string {
+func fetchVersionFromReadme(client *http.HTTPClientManager, target, plugin string) string {
 	readmes := []string{"readme.txt", "Readme.txt", "README.txt"}
 	for _, name := range readmes {
 		url := fmt.Sprintf("%s/wp-content/plugins/%s/%s", target, plugin, name)
