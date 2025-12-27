@@ -22,6 +22,7 @@ package http
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -39,16 +40,20 @@ const maxResponseSizeMB = 50
 
 var maxResponseSize = maxResponseSizeMB * 1024 * 1024
 
-const maxRedirects = 10
+const defaultMaxRedirects = 10
 
 type HTTPClientManager struct {
-	client     *http.Client
-	userAgent  string
-	headers    []string
-	rateLimiter *RateLimiter
+	client       *http.Client
+	userAgent    string
+	headers      []string
+	rateLimiter  *RateLimiter
+	maxRedirects int
 }
 
-func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps int) *HTTPClientManager {
+func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps int, maxRedirects int) *HTTPClientManager {
+	if maxRedirects < 0 {
+		maxRedirects = defaultMaxRedirects
+	}
 	transport := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true,
@@ -67,19 +72,27 @@ func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps
 	client := &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	}
+
+	if maxRedirects == 0 {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	} else {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			if len(via) >= maxRedirects {
 				return errors.New("stopped after max redirects")
 			}
 			return nil
-		},
+		}
 	}
 
 	return &HTTPClientManager{
-		client:      client,
-		userAgent:   uarand.GetRandom(),
-		headers:     headers,
-		rateLimiter: NewRateLimiter(rps),
+		client:       client,
+		userAgent:    uarand.GetRandom(),
+		headers:      headers,
+		rateLimiter:  NewRateLimiter(rps),
+		maxRedirects: maxRedirects,
 	}
 }
 
@@ -104,11 +117,20 @@ func (h *HTTPClientManager) parseHeaders() (map[string]string, bool) {
 }
 
 func (h *HTTPClientManager) Get(url string) (string, error) {
+	return h.GetWithContext(context.Background(), url)
+}
+
+func (h *HTTPClientManager) GetWithContext(ctx context.Context, url string) (string, error) {
 	if h.rateLimiter != nil {
-		h.rateLimiter.Wait()
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+			h.rateLimiter.Wait()
+		}
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -129,24 +151,45 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 
 	resp, err := h.client.Do(req)
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	redirects := 0
-	for resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		if redirects >= maxRedirects {
-			return "", errors.New("stopped after max redirects")
+	if h.maxRedirects == 0 {
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			return "", errors.New("redirects disabled")
 		}
+	} else {
+		redirects := 0
+		for resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			default:
+			}
+			if redirects >= h.maxRedirects {
+				return "", errors.New("stopped after max redirects")
+			}
 		location, err := resp.Location()
 		if err != nil {
 			return "", fmt.Errorf("failed to get redirect location: %w", err)
 		}
-		resp, err = h.client.Get(location.String())
+		redirectReq, err := http.NewRequestWithContext(ctx, "GET", location.String(), nil)
 		if err != nil {
-			return "", fmt.Errorf("redirect request failed: %w", err)
+			return "", fmt.Errorf("failed to create redirect request: %w", err)
 		}
-		redirects++
+			resp, err = h.client.Do(redirectReq)
+			if err != nil {
+				if ctx.Err() != nil {
+					return "", ctx.Err()
+				}
+				return "", fmt.Errorf("redirect request failed: %w", err)
+			}
+			redirects++
+		}
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

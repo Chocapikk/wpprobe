@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"context"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
@@ -49,7 +50,7 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 		ScanContext: ScanContext{
 			Target:   req.Target,
 			Threads:  req.Opts.Threads,
-			HTTP:     HTTPConfig{Headers: req.Opts.Headers, Proxy: req.Opts.Proxy, RateLimit: req.Opts.RateLimit},
+			HTTP:     HTTPConfig{Headers: req.Opts.Headers, Proxy: req.Opts.Proxy, RateLimit: req.Opts.RateLimit, MaxRedirects: req.Opts.MaxRedirects},
 			Progress: req.Progress,
 		},
 		SyncContext: SyncContext{
@@ -61,6 +62,7 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 		EntriesList:     &entriesList,
 		Vulnerabilities: req.Vulns,
 		VulnIndex:       vulnIndex,
+		PreDetectedVersions: req.Versions,
 	}
 
 	for _, plugin := range req.Plugins {
@@ -94,7 +96,7 @@ func checkPluginVulnerabilities(
 	defer releaseSemaphore(ctx.Sem)
 	defer recoverFromPanic()
 
-	version := getPluginVersion(plugin, opts, ctx)
+	version := getPluginVersion(plugin, opts, ctx, ctx.PreDetectedVersions)
 	matched := findMatchingVulnerabilities(plugin, version, ctx.VulnIndex)
 	local := buildPluginEntries(plugin, version, matched)
 
@@ -108,11 +110,20 @@ func checkPluginVulnerabilities(
 	incrementProgressIfNeeded(ctx.Progress, opts)
 }
 
-func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckContext) string {
+func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckContext, preDetectedVersions map[string]string) string {
 	if opts.NoCheckVersion {
 		return "unknown"
 	}
-	return versionpkg.GetPluginVersion(ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit)
+	if preDetectedVersions != nil {
+		if version, exists := preDetectedVersions[plugin]; exists {
+			return version
+		}
+	}
+	maxRedirects := ctx.HTTP.MaxRedirects
+	if maxRedirects == 0 {
+		maxRedirects = -1
+	}
+	return versionpkg.GetPluginVersionWithContext(context.Background(), ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit, maxRedirects)
 }
 
 func findMatchingVulnerabilities(
@@ -122,7 +133,7 @@ func findMatchingVulnerabilities(
 ) []wordfence.Vulnerability {
 	pluginVulns, exists := vulnIndex[plugin]
 	if !exists {
-		return nil
+		return []wordfence.Vulnerability{}
 	}
 
 	var matched []wordfence.Vulnerability
@@ -151,10 +162,29 @@ func buildPluginEntries(
 		return []file.PluginEntry{createEmptyPluginEntry(plugin, version)}
 	}
 
+	seenCVEs := make(map[string]bool)
 	var entries []file.PluginEntry
+
 	for _, v := range matched {
+		cve := v.CVE
+		if cve == "" {
+			cve = v.Title
+		}
+		if cve == "" {
+			continue
+		}
+
+		if seenCVEs[cve] {
+			continue
+		}
+		seenCVEs[cve] = true
 		entries = append(entries, createVulnerablePluginEntry(plugin, version, v))
 	}
+
+	if len(entries) == 0 {
+		return []file.PluginEntry{createEmptyPluginEntry(plugin, version)}
+	}
+
 	return entries
 }
 

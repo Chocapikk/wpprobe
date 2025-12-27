@@ -127,7 +127,7 @@ func Test_fetchVersionFromReadme(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	client := http.NewHTTPClient(5*time.Second, nil, "", 0)
+	client := http.NewHTTPClient(5*time.Second, nil, "", 0, -1)
 	version := fetchVersionFromReadme(client, mockServer.URL, "sample")
 	if version != "3.4.1" {
 		t.Errorf("fetchVersionFromReadme() = %v, want %v", version, "3.4.1")
