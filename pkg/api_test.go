@@ -16,11 +16,11 @@ func TestAPI_Scan(t *testing.T) {
 	}
 
 	cfg := wpprobe.Config{
-		Target:   "http://localhost:9000",
-		ScanMode: "stealthy",
-		Threads:  10,
+		Target:    "http://localhost:9000",
+		ScanMode:  "stealthy",
+		Threads:   10,
 		RateLimit: 5,
-		Context:  context.Background(),
+		Context:   context.Background(),
 	}
 
 	start := time.Now()
@@ -139,7 +139,7 @@ func TestAPI_UpdateDatabases(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping database update test in short mode")
 	}
-	
+
 	// This test may take a while and requires network access
 	err := wpprobe.UpdateDatabases()
 	if err != nil {
@@ -147,7 +147,7 @@ func TestAPI_UpdateDatabases(t *testing.T) {
 		// Don't fail the test, as this requires network and may hit rate limits
 		return
 	}
-	
+
 	t.Log("Databases updated successfully")
 }
 
@@ -156,13 +156,12 @@ func TestAPI_Reload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create scanner: %v", err)
 	}
-	
+
 	// Reload should work even if databases don't exist
 	err = scanner.Reload()
 	if err != nil {
 		t.Fatalf("Reload failed: %v", err)
 	}
-	
+
 	t.Log("Scanner reloaded successfully")
 }
-

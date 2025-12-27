@@ -22,6 +22,7 @@ package wpprobe
 
 import (
 	"context"
+	"os"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
@@ -311,5 +312,15 @@ func (s *Scanner) Reload() error {
 	
 	s.vulns = allVulns
 	return nil
+}
+
+// DatabaseExists checks if the Wordfence vulnerability database file exists.
+func DatabaseExists() bool {
+	filePath, err := file.GetStoragePath("wordfence_vulnerabilities.json")
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filePath)
+	return err == nil
 }
 
