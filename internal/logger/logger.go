@@ -39,12 +39,21 @@ var (
 )
 
 type Logger struct {
-	Logger *log.Logger
+	Logger  *log.Logger
+	Verbose bool
 }
 
 func NewLogger() *Logger {
 	return &Logger{
-		Logger: log.New(os.Stdout, "", 0),
+		Logger:  log.New(os.Stdout, "", 0),
+		Verbose: true, // Default to verbose for CLI
+	}
+}
+
+func NewLoggerWithVerbose(verbose bool) *Logger {
+	return &Logger{
+		Logger:  log.New(os.Stdout, "", 0),
+		Verbose: verbose,
 	}
 }
 
@@ -53,18 +62,28 @@ func formatTime() string {
 }
 
 func (l *Logger) Info(msg string) {
+	if !l.Verbose {
+		return
+	}
 	l.Logger.Println(formatTime() + " [" + infoStyle.Render("INFO") + "] " + msg)
 }
 
 func (l *Logger) Warning(msg string) {
+	if !l.Verbose {
+		return
+	}
 	l.Logger.Println(formatTime() + " [" + warningStyle.Render("WARNING") + "] " + msg)
 }
 
 func (l *Logger) Error(msg string) {
+	// Errors are always shown, even when not verbose
 	l.Logger.Println(formatTime() + " [" + errorStyle.Render("ERROR") + "] " + msg)
 }
 
 func (l *Logger) Success(msg string) {
+	if !l.Verbose {
+		return
+	}
 	l.Logger.Println(formatTime() + " [" + successStyle.Render("SUCCESS") + "] " + msg)
 }
 

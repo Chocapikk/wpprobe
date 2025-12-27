@@ -65,6 +65,9 @@ type Config struct {
 
 	// Progress callback (optional)
 	ProgressCallback func(message string, current, total int)
+
+	// Enable verbose logging (default: false for API)
+	Verbose bool
 }
 
 // PluginResult represents a detected plugin with its vulnerabilities.
@@ -193,6 +196,7 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		NoCheckVersion: cfg.NoCheckVersion,
 		MaxRedirects:   maxRedirects,
 		File:           "api", // Set File to disable progress bar display
+		Verbose:        cfg.Verbose, // Use Verbose from config (default: false)
 	}
 
 	writer := file.NewMemoryWriter()

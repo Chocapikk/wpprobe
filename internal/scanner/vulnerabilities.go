@@ -138,10 +138,9 @@ func findMatchingVulnerabilities(
 
 	var matched []wordfence.Vulnerability
 	if version == "" || version == "unknown" {
-		// If version is unknown, return all vulnerabilities for this plugin
-		matched = make([]wordfence.Vulnerability, len(pluginVulns))
-		copy(matched, pluginVulns)
-		return matched
+		// If version is unknown, we cannot verify vulnerabilities
+		// Vulnerabilities must be based on the detected version in the database
+		return []wordfence.Vulnerability{}
 	}
 
 	// Filter by version

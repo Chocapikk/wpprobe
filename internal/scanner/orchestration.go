@@ -22,10 +22,14 @@ package scanner
 import (
 	"sync"
 
+	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 )
 
 func ScanTargets(opts ScanOptions) {
+	// Configure logger verbosity
+	logger.DefaultLogger.Verbose = opts.Verbose
+
 	targets := loadTargets(opts)
 	if len(targets) == 0 {
 		return
