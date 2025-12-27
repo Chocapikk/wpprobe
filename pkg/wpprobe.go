@@ -227,6 +227,7 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 }
 
 // buildResult converts internal file entries to public API results.
+// Only includes vulnerabilities for plugins with known versions (not "unknown" or empty).
 func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanResult {
 	result := &ScanResult{
 		Target:  target,
@@ -237,6 +238,12 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 	pluginMap := make(map[string]*PluginResult)
 
 	for _, entry := range entries {
+		// Skip vulnerabilities if version is unknown or empty
+		// We can't match CVEs to a specific version without knowing the version
+		if entry.Version == "" || entry.Version == "unknown" {
+			continue
+		}
+
 		plugin, exists := pluginMap[entry.Plugin]
 		if !exists {
 			plugin = &PluginResult{
@@ -282,8 +289,15 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 		}
 	}
 
+	// Only include plugins that have at least one vulnerability
 	for _, plugin := range pluginMap {
-		result.Plugins = append(result.Plugins, *plugin)
+		hasVulns := len(plugin.Vulnerabilities.Critical) > 0 ||
+			len(plugin.Vulnerabilities.High) > 0 ||
+			len(plugin.Vulnerabilities.Medium) > 0 ||
+			len(plugin.Vulnerabilities.Low) > 0
+		if hasVulns {
+			result.Plugins = append(result.Plugins, *plugin)
+		}
 	}
 
 	result.TotalVulnerabilities = result.Summary.Critical + result.Summary.High + result.Summary.Medium + result.Summary.Low
