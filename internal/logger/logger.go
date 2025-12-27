@@ -120,7 +120,7 @@ func (l *Logger) PrintBanner(version string, isLatest bool) {
 	fmt.Println(logoLines + "\n" + versionLine + "\n")
 	fmt.Println(textStyle.Render("Stealthy WordPress Plugin Scanner - By @Chocapikk\n"))
 
-	if !isLatest {
+	if !isLatest && l.Verbose {
 		l.Warning("Your current WPProbe version is outdated. Latest version available.")
 		l.Info("Update with: wpprobe update")
 	}

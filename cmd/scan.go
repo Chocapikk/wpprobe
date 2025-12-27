@@ -27,6 +27,7 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
+	"github.com/Chocapikk/wpprobe/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +58,14 @@ var scanCmd = &cobra.Command{
 	Short: "Scan a WordPress site for installed plugins and vulnerabilities",
 	Long:  `Scans a WordPress site to detect installed plugins and check for known vulnerabilities using the Wordfence database.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Configure logger verbosity first
+		verbose := mustBool(cmd.Flags().GetBool("verbose"))
+		logger.DefaultLogger.Verbose = verbose
+
+		// Print banner after verbose is configured
+		_, isLatest := version.CheckLatestVersion(version.Version)
+		logger.DefaultLogger.PrintBanner(version.Version, isLatest)
+
 		outputFile := cmd.Flag("output").Value.String()
 		outputFormat := file.DetectOutputFormat(outputFile)
 

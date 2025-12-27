@@ -35,9 +35,8 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-	_, isLatest := version.CheckLatestVersion(version.Version)
-	logger.DefaultLogger.PrintBanner(version.Version, isLatest)
-
+	// Banner is now printed in scanCmd after verbose is configured
+	// For other commands, we still print it here
 	if err := rootCmd.Execute(); err != nil {
 		logger.DefaultLogger.Error(err.Error())
 		os.Exit(1)
