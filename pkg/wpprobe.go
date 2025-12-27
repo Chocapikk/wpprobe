@@ -146,7 +146,15 @@ type Scanner struct {
 // New creates a new Scanner instance.
 // It loads vulnerabilities from the default databases (Wordfence and WPScan if configured).
 // If databases are not available, it will continue with an empty vulnerability list.
+// Logging is disabled during vulnerability loading when called from the API.
 func New() (*Scanner, error) {
+	// Disable verbose logging during vulnerability loading
+	oldVerbose := logger.DefaultLogger.Verbose
+	logger.DefaultLogger.Verbose = false
+	defer func() {
+		logger.DefaultLogger.Verbose = oldVerbose
+	}()
+
 	allVulns := []vulnerability.Vulnerability{}
 	
 	// Try to load Wordfence vulnerabilities, but don't fail if not available
