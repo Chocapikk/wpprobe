@@ -25,6 +25,7 @@ import (
 	"os"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
@@ -286,7 +287,15 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 // WPScan update requires WPSCAN_API_TOKEN environment variable to be set.
 // Returns an error only if Wordfence update fails. WPScan update failures are ignored
 // (WPScan is optional and requires Enterprise plan).
+// Logging is disabled during database updates when called from the API.
 func UpdateDatabases() error {
+	// Disable verbose logging during database updates
+	oldVerbose := logger.DefaultLogger.Verbose
+	logger.DefaultLogger.Verbose = false
+	defer func() {
+		logger.DefaultLogger.Verbose = oldVerbose
+	}()
+
 	if err := wordfence.UpdateWordfence(); err != nil {
 		return err
 	}
