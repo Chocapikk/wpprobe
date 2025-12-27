@@ -20,8 +20,13 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/Chocapikk/wpprobe/internal/http"
 	"github.com/Chocapikk/wpprobe/internal/logger"
@@ -31,19 +36,31 @@ import (
 
 // BruteforcePlugins attempts to detect plugins by parsing their readme.txt for version.
 // It updates the progress bar message with a fixed-width plugin name.
-func BruteforcePlugins(req BruteforceRequest) []string {
+func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 	if len(req.Plugins) == 0 {
 		logger.DefaultLogger.Warning("No plugins provided for brute-force scan")
-		return nil
+		return nil, make(map[string]string)
 	}
 
 	normalized := http.NormalizeURL(req.Target)
 	var detected []string
+	versions := make(map[string]string)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, req.Threads)
 
-	ctx := BruteforceContext{
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		logger.DefaultLogger.Info("Interruption signal received, stopping bruteforce scan...")
+		cancel()
+	}()
+
+	bruteCtx := BruteforceContext{
 		ScanContext: ScanContext{
 			Target:   normalized,
 			Threads:  req.Threads,
@@ -56,20 +73,52 @@ func BruteforcePlugins(req BruteforceRequest) []string {
 			Sem: sem,
 		},
 		Detected: &detected,
+		Versions: &versions,
+		Ctx:      ctx,
+		Cancel:   cancel,
 	}
 
+pluginLoop:
 	for _, plugin := range req.Plugins {
+		if ctx.Err() != nil {
+			logger.DefaultLogger.Info("Bruteforce scan interrupted, saving results...")
+			break pluginLoop
+		}
+
 		wg.Add(1)
-		sem <- struct{}{}
-		go scanPlugin(plugin, ctx)
+		select {
+		case sem <- struct{}{}:
+			go scanPlugin(plugin, bruteCtx)
+		case <-ctx.Done():
+			wg.Done()
+			logger.DefaultLogger.Info("Bruteforce scan interrupted, saving results...")
+			break pluginLoop
+		}
 	}
 
-	wg.Wait()
-	return detected
+	if ctx.Err() != nil {
+		logger.DefaultLogger.Info("Waiting for active goroutines to finish collecting results...")
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			logger.DefaultLogger.Info("All goroutines finished, displaying results...")
+		case <-time.After(3 * time.Second):
+			logger.DefaultLogger.Warning("Some goroutines did not finish in time, displaying partial results...")
+		}
+	} else {
+		wg.Wait()
+	}
+
+	return detected, versions
 }
 
 // HybridScan performs a hybrid scan: first stealthy, then brute-forces remaining plugins.
-func HybridScan(req HybridScanRequest) []string {
+func HybridScan(req HybridScanRequest) ([]string, map[string]string) {
 	bruteReq := BruteforceRequest{
 		Target:   req.Target,
 		Threads:  req.Threads,
@@ -79,7 +128,8 @@ func HybridScan(req HybridScanRequest) []string {
 
 	if len(req.StealthyPlugins) == 0 {
 		bruteReq.Plugins = req.BruteforcePlugins
-		return BruteforcePlugins(bruteReq)
+		detected, versions := BruteforcePlugins(bruteReq)
+		return detected, versions
 	}
 
 	detectedMap := make(map[string]bool, len(req.StealthyPlugins))
@@ -95,10 +145,10 @@ func HybridScan(req HybridScanRequest) []string {
 	}
 
 	bruteReq.Plugins = remaining
-	brutefound := BruteforcePlugins(bruteReq)
+	brutefound, versions := BruteforcePlugins(bruteReq)
 	result := make([]string, len(req.StealthyPlugins), len(req.StealthyPlugins)+len(brutefound))
 	copy(result, req.StealthyPlugins)
-	return append(result, brutefound...)
+	return append(result, brutefound...), versions
 }
 
 func scanPlugin(plugin string, ctx BruteforceContext) {
@@ -106,16 +156,34 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 	defer releaseSemaphore(ctx.Sem)
 	defer handlePanic(plugin)
 
-	updateProgressMessage(ctx.Progress, plugin)
-
-	version := version.GetPluginVersion(ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit)
-	if version == "" || version == "unknown" {
-		incrementProgress(ctx.Progress)
+	select {
+	case <-ctx.Ctx.Done():
 		return
+	default:
 	}
 
-	handlePluginFound(plugin, version, ctx.Progress, ctx.Mu, ctx.Detected)
-	incrementProgress(ctx.Progress)
+	updateProgressMessage(ctx.Progress, plugin)
+
+	select {
+	case <-ctx.Ctx.Done():
+		return
+	default:
+		version := version.GetPluginVersionWithContext(ctx.Ctx, ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit, ctx.HTTP.MaxRedirects)
+
+		select {
+		case <-ctx.Ctx.Done():
+			return
+		default:
+		}
+
+		if version == "" || version == "unknown" {
+			incrementProgress(ctx.Progress)
+			return
+		}
+
+		handlePluginFound(plugin, version, ctx.Progress, ctx.Mu, ctx.Detected, ctx.Versions, ctx.Cancel)
+		incrementProgress(ctx.Progress)
+	}
 }
 
 func handlePanic(plugin string) {
@@ -139,6 +207,8 @@ func handlePluginFound(
 	progress *progress.ProgressManager,
 	mu *sync.Mutex,
 	detected *[]string,
+	versions *map[string]string,
+	cancel context.CancelFunc,
 ) {
 	if progress != nil {
 		progress.ClearLine()
@@ -150,7 +220,15 @@ func handlePluginFound(
 
 	mu.Lock()
 	*detected = append(*detected, plugin)
+	if versions != nil {
+		(*versions)[plugin] = version
+	}
 	mu.Unlock()
+
+	if cancel != nil {
+		logger.DefaultLogger.Info("Plugin found, stopping bruteforce scan to display results...")
+		cancel()
+	}
 }
 
 func incrementProgress(progress *progress.ProgressManager) {

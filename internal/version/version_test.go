@@ -20,6 +20,7 @@
 package version
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
@@ -111,7 +112,7 @@ func TestGetPluginVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetPluginVersion(tt.target, tt.plugin, nil, "", 0)
+			got := GetPluginVersion(tt.target, tt.plugin, nil, "", 0, -1)
 			if got != tt.expected {
 				t.Errorf("GetPluginVersion() = %v, want %v", got, tt.expected)
 			}
@@ -127,8 +128,8 @@ func Test_fetchVersionFromReadme(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	client := http.NewHTTPClient(5*time.Second, nil, "", 0)
-	version := fetchVersionFromReadme(client, mockServer.URL, "sample")
+	client := http.NewHTTPClient(5*time.Second, nil, "", 0, -1)
+	version := fetchVersionFromReadme(context.Background(), client, mockServer.URL, "sample")
 	if version != "3.4.1" {
 		t.Errorf("fetchVersionFromReadme() = %v, want %v", version, "3.4.1")
 	}

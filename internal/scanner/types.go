@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"context"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
@@ -41,6 +42,7 @@ type ScanOptions struct {
 	Headers        []string
 	Proxy          string
 	RateLimit      int // Requests per second (0 = unlimited)
+	MaxRedirects   int // Maximum redirects to follow (0 = disable, -1 = default: 10)
 }
 
 // PluginData contains information about a detected plugin.
@@ -99,9 +101,10 @@ type PluginDisplayData struct {
 
 // HTTPConfig contains HTTP-related configuration.
 type HTTPConfig struct {
-	Headers   []string
-	Proxy     string
-	RateLimit int // Requests per second (0 = unlimited)
+	Headers     []string
+	Proxy       string
+	RateLimit   int // Requests per second (0 = unlimited)
+	MaxRedirects int // Maximum redirects to follow (0 = disable, -1 = default: 10)
 }
 
 // ScanContext contains context for scanning operations.
@@ -143,6 +146,9 @@ type BruteforceContext struct {
 	ScanContext
 	SyncContext
 	Detected *[]string
+	Versions *map[string]string
+	Ctx      context.Context
+	Cancel   context.CancelFunc
 }
 
 // VulnerabilityCheckRequest contains request parameters for checking vulnerabilities.
@@ -152,6 +158,7 @@ type VulnerabilityCheckRequest struct {
 	Vulns    []wordfence.Vulnerability
 	Opts     ScanOptions
 	Progress *progress.ProgressManager
+	Versions map[string]string
 }
 
 // VulnerabilityCheckContext contains context for vulnerability checking.
@@ -162,6 +169,7 @@ type VulnerabilityCheckContext struct {
 	EntriesList     *[]file.PluginEntry
 	Vulnerabilities []wordfence.Vulnerability
 	VulnIndex       map[string][]wordfence.Vulnerability // Indexed by plugin slug for fast lookup
+	PreDetectedVersions map[string]string
 }
 
 // ScanExecutionConfig contains all configuration for executing multiple scans.

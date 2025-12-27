@@ -128,6 +128,30 @@ func findOrCreateSeverityEntry(vg *VersionGroup, severity string) *SeverityEntry
 	return &vg.Severities[len(vg.Severities)-1]
 }
 
+// findOrCreateAuthGroup finds or creates an AuthGroup in a SeverityEntry.
+func findOrCreateAuthGroup(se *SeverityEntry, authType string) *AuthGroup {
+	for i := range se.Auths {
+		if se.Auths[i].AuthType == authType {
+			return &se.Auths[i]
+		}
+	}
+	se.Auths = append(se.Auths, AuthGroup{
+		AuthType:        authType,
+		Vulnerabilities: []Vulnerability{},
+	})
+	return &se.Auths[len(se.Auths)-1]
+}
+
+// containsVulnerability checks if a vulnerability with the given CVE already exists.
+func containsVulnerability(vulns []Vulnerability, cve string) bool {
+	for _, v := range vulns {
+		if v.CVE == cve && cve != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // sortSeveritiesByOrder sorts severities using the severity order map.
 func sortSeveritiesByOrder(severities []SeverityEntry) {
 	severityOrder := getSeverityOrder()
@@ -248,10 +272,14 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 		authFormatted := formatAuthTypeTitle(auth)
 		vuln := buildVulnerabilityFromEntry(entry)
 
-		se.Auths = append(se.Auths, AuthGroup{
-			AuthType:        authFormatted,
-			Vulnerabilities: []Vulnerability{vuln},
-		})
+		authGroup := findOrCreateAuthGroup(se, authFormatted)
+		if len(entry.CVEs) == 0 && severity == "none" {
+			if len(authGroup.Vulnerabilities) == 0 {
+				authGroup.Vulnerabilities = append(authGroup.Vulnerabilities, vuln)
+			}
+		} else if !containsVulnerability(authGroup.Vulnerabilities, vuln.CVE) {
+			authGroup.Vulnerabilities = append(authGroup.Vulnerabilities, vuln)
+		}
 
 		sortSeveritiesByOrder(vg.Severities)
 	}

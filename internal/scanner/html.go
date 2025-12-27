@@ -30,9 +30,9 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-func discoverPluginsFromHTML(target string, headers []string, proxyURL string, rps int) ([]string, error) {
+func discoverPluginsFromHTML(target string, headers []string, proxyURL string, rps int, maxRedirects int) ([]string, error) {
 	normalized := http.NormalizeURL(target)
-	client := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps)
+	client := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps, maxRedirects)
 
 	slugsSet := make(map[string]struct{})
 

@@ -20,6 +20,7 @@
 package version
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
@@ -75,20 +76,39 @@ func GetPluginVersion(
 	headers []string,
 	proxyURL string,
 	rps int,
+	maxRedirects int,
 ) string {
-	httpClient := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps)
-	return fetchVersionFromReadme(httpClient, target, plugin)
+	return GetPluginVersionWithContext(context.Background(), target, plugin, headers, proxyURL, rps, maxRedirects)
 }
 
-func fetchVersionFromReadme(client *http.HTTPClientManager, target, plugin string) string {
+func GetPluginVersionWithContext(
+	ctx context.Context,
+	target, plugin string,
+	headers []string,
+	proxyURL string,
+	rps int,
+	maxRedirects int,
+) string {
+	httpClient := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps, maxRedirects)
+	return fetchVersionFromReadme(ctx, httpClient, target, plugin)
+}
+
+func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager, target, plugin string) string {
 	readmes := []string{"readme.txt", "Readme.txt", "README.txt"}
 	for _, name := range readmes {
+		select {
+		case <-ctx.Done():
+			return "unknown"
+		default:
+		}
 		url := fmt.Sprintf("%s/wp-content/plugins/%s/%s", target, plugin, name)
-		if body, err := client.Get(url); err == nil {
+		if body, err := client.GetWithContext(ctx, url); err == nil {
 			re := regexp.MustCompile(`(?:Stable tag|Version):\s*([0-9A-Za-z.\-]+)`)
 			if m := re.FindStringSubmatch(body); len(m) > 1 {
 				return strings.TrimSpace(m[1])
 			}
+		} else if ctx.Err() != nil {
+			return "unknown"
 		}
 	}
 	return "unknown"

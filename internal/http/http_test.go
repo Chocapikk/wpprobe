@@ -79,7 +79,7 @@ func TestHTTPClientManager_Get(t *testing.T) {
 			mockServer := httptest.NewServer(tt.serverFunc)
 			defer mockServer.Close()
 
-			client := NewHTTPClient(5*time.Second, nil, "", 0)
+			client := NewHTTPClient(5*time.Second, nil, "", 0, -1)
 
 			got, err := client.Get(mockServer.URL)
 

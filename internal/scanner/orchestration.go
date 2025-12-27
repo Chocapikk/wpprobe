@@ -105,7 +105,7 @@ func ScanSite(ctx ScanSiteContext) {
 		Progress: ctx.Progress,
 	}
 
-	detected, result := performScan(execCtx, scanMode)
+	detected, result, versions := performScan(execCtx, scanMode)
 
 	if len(detected) == 0 {
 		handleNoPluginsDetected(ctx)
@@ -118,6 +118,7 @@ func ScanSite(ctx ScanSiteContext) {
 		Vulns:    ctx.Vulns,
 		Opts:     ctx.Opts,
 		Progress: ctx.Progress,
+		Versions: versions,
 	}
 	entriesMap, entriesList := CheckVulnerabilities(vulnReq)
 
@@ -140,4 +141,3 @@ func ScanSite(ctx ScanSiteContext) {
 	}
 	DisplayResults(displayCtx)
 }
-

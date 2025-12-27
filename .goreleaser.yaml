@@ -28,7 +28,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - "-s -w -X github.com/Chocapikk/wpprobe/internal/utils.Version=v{{ .Version }}"
+      - "-s -w -X github.com/Chocapikk/wpprobe/internal/version.Version=v{{ .Version }}"
 
   - id: wpprobe-android
     main: ./main.go
@@ -47,7 +47,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - "-s -w -X github.com/Chocapikk/wpprobe/internal/utils.Version=v{{ .Version }}"
+      - "-s -w -X github.com/Chocapikk/wpprobe/internal/version.Version=v{{ .Version }}"
 
 archives:
   - id: custom

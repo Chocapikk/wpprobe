@@ -113,8 +113,11 @@ func buildSummaryLine(
 }
 
 func DisplayResults(ctx DisplayResultsContext) {
-	if len(ctx.Results) == 0 {
-		fmt.Println(NoVulnStyle.Render("No vulnerabilities found for target: " + ctx.Target))
+	if isFileScan(ctx.Opts) {
+		return
+	}
+	if len(ctx.Detected) == 0 {
+		fmt.Println(NoVulnStyle.Render("No plugins detected for target: " + ctx.Target))
 		return
 	}
 

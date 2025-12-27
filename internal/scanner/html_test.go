@@ -104,7 +104,7 @@ func TestDiscoverPluginsFromHTML(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	slugs, err := discoverPluginsFromHTML(ts.URL, nil, "", 0)
+	slugs, err := discoverPluginsFromHTML(ts.URL, nil, "", 0, -1)
 	if err != nil {
 		t.Fatalf("discoverPluginsFromHTML returned error: %v", err)
 	}

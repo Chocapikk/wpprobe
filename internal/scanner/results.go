@@ -64,7 +64,7 @@ func buildDetectionResult(ctx DetectionResultContext) PluginDetectionResult {
 	return result
 }
 
-func buildBruteforceResult(detected []string) ([]string, PluginDetectionResult) {
+func buildBruteforceResult(detected []string, versions map[string]string) ([]string, PluginDetectionResult) {
 	result := PluginDetectionResult{
 		Plugins:  make(map[string]*PluginData, len(detected)),
 		Detected: detected,
