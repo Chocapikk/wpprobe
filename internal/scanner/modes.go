@@ -63,7 +63,7 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 
 	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "🔎 Discovering plugins from HTML...")
 
-	htmlSlugs, err := discoverPluginsFromHTML(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects)
+	htmlSlugs, err := discoverPluginsFromHTML(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects, ctx.Opts.HTTPClient)
 	if err != nil {
 		// If context was cancelled, return early
 		if ctx.Ctx != nil && ctx.Ctx.Err() != nil {
@@ -88,7 +88,7 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 		return nil, PluginDetectionResult{}
 	}
 
-	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects)
+	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects, ctx.Opts.HTTPClient)
 
 	resultCtx := DetectionResultContext{
 		Endpoints:     endpoints,

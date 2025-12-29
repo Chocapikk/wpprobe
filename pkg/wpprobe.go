@@ -22,6 +22,7 @@ package wpprobe
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"strings"
 
@@ -70,6 +71,11 @@ type Config struct {
 
 	// Enable verbose logging (default: false for API)
 	Verbose bool
+
+	// HTTPClient allows injecting an external HTTP client (e.g., from a connection pool).
+	// If provided, wpprobe will use this client instead of creating its own.
+	// The client should handle timeouts, TLS, and redirects as needed.
+	HTTPClient *http.Client
 }
 
 // PluginResult represents a detected plugin with its vulnerabilities.
@@ -204,6 +210,7 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		File:           "api",        // Set File to disable progress bar display
 		Verbose:        cfg.Verbose,  // Use Verbose from config (default: false)
 		Context:        cfg.Context,  // Propagate context for cancellation
+		HTTPClient:     cfg.HTTPClient, // Use external HTTP client if provided
 	}
 
 	writer := file.NewMemoryWriter()

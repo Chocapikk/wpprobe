@@ -21,6 +21,7 @@ package scanner
 
 import (
 	"context"
+	"net/http"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
@@ -44,6 +45,7 @@ type ScanOptions struct {
 	RateLimit      int             // Requests per second (0 = unlimited)
 	MaxRedirects   int             // Maximum redirects to follow (0 = disable, -1 = default: 10)
 	Context        context.Context // Context for cancellation
+	HTTPClient     *http.Client    // External HTTP client (optional, for connection pooling)
 }
 
 // PluginData contains information about a detected plugin.
@@ -107,6 +109,7 @@ type HTTPConfig struct {
 	RateLimit    int             // Requests per second (0 = unlimited)
 	MaxRedirects int             // Maximum redirects to follow (0 = disable, -1 = default: 10)
 	Context      context.Context // Context for cancellation
+	Client       *http.Client    // External HTTP client (optional)
 }
 
 // ScanContext contains context for scanning operations.

@@ -22,6 +22,7 @@ package scanner
 import (
 	"context"
 	"io"
+	stdhttp "net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-func discoverPluginsFromHTML(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int) ([]string, error) {
+func discoverPluginsFromHTML(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int, externalClient *stdhttp.Client) ([]string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -44,7 +45,12 @@ func discoverPluginsFromHTML(ctx context.Context, target string, headers []strin
 	}
 
 	normalized := http.NormalizeURL(target)
-	client := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps, maxRedirects)
+	var client *http.HTTPClientManager
+	if externalClient != nil {
+		client = http.NewHTTPClientFromExternal(externalClient, headers, rps)
+	} else {
+		client = http.NewHTTPClient(5*time.Second, headers, proxyURL, rps, maxRedirects)
+	}
 
 	slugsSet := make(map[string]struct{})
 

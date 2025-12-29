@@ -96,6 +96,19 @@ func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps
 	}
 }
 
+// NewHTTPClientFromExternal wraps an external http.Client (e.g., from a connection pool).
+// This allows reusing an existing client instead of creating a new one.
+// The external client is used as-is; headers and rate limiting are still applied.
+func NewHTTPClientFromExternal(externalClient *http.Client, headers []string, rps int) *HTTPClientManager {
+	return &HTTPClientManager{
+		client:       externalClient,
+		userAgent:    "", // User-Agent should be set by the external client or headers
+		headers:      headers,
+		rateLimiter:  NewRateLimiter(rps),
+		maxRedirects: 0, // External client handles redirects
+	}
+}
+
 func (h *HTTPClientManager) parseHeaders() (map[string]string, bool) {
 	headers := make(map[string]string)
 	hasUA := false

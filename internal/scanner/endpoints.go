@@ -22,6 +22,7 @@ package scanner
 import (
 	"context"
 	"encoding/json"
+	stdhttp "net/http"
 	"sync"
 	"time"
 
@@ -52,7 +53,7 @@ func fetchEndpointsFromPath(ctx context.Context, target, path string, httpClient
 	return endpoints
 }
 
-func FetchEndpoints(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int) []string {
+func FetchEndpoints(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int, externalClient *stdhttp.Client) []string {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -64,7 +65,12 @@ func FetchEndpoints(ctx context.Context, target string, headers []string, proxyU
 	default:
 	}
 
-	httpClient := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps, maxRedirects)
+	var httpClient *http.HTTPClientManager
+	if externalClient != nil {
+		httpClient = http.NewHTTPClientFromExternal(externalClient, headers, rps)
+	} else {
+		httpClient = http.NewHTTPClient(5*time.Second, headers, proxyURL, rps, maxRedirects)
+	}
 
 	endpointsChan := make(chan []string, 2)
 	var wg sync.WaitGroup
