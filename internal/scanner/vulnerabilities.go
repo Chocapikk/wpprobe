@@ -58,11 +58,12 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 			Wg:  &wg,
 			Sem: sem,
 		},
-		EntriesMap:      &entriesMap,
-		EntriesList:     &entriesList,
-		Vulnerabilities: req.Vulns,
-		VulnIndex:       vulnIndex,
+		EntriesMap:          &entriesMap,
+		EntriesList:         &entriesList,
+		Vulnerabilities:     req.Vulns,
+		VulnIndex:           vulnIndex,
 		PreDetectedVersions: req.Versions,
+		Ctx:                 req.Ctx,
 	}
 
 	for _, plugin := range req.Plugins {
@@ -123,7 +124,11 @@ func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckCon
 	if maxRedirects == 0 {
 		maxRedirects = -1
 	}
-	return versionpkg.GetPluginVersionWithContext(context.Background(), ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit, maxRedirects)
+	scanCtx := ctx.Ctx
+	if scanCtx == nil {
+		scanCtx = context.Background()
+	}
+	return versionpkg.GetPluginVersionWithContext(scanCtx, ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit, maxRedirects)
 }
 
 func findMatchingVulnerabilities(

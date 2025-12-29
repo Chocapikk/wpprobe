@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"time"
@@ -27,8 +28,8 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-func fetchEndpointsFromPath(target, path string, httpClient *http.HTTPClientManager) []string {
-	response, err := httpClient.Get(target + path)
+func fetchEndpointsFromPath(ctx context.Context, target, path string, httpClient *http.HTTPClientManager) []string {
+	response, err := httpClient.GetWithContext(ctx, target+path)
 	if err != nil {
 		return []string{}
 	}
@@ -51,7 +52,18 @@ func fetchEndpointsFromPath(target, path string, httpClient *http.HTTPClientMana
 	return endpoints
 }
 
-func FetchEndpoints(target string, headers []string, proxyURL string, rps int, maxRedirects int) []string {
+func FetchEndpoints(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int) []string {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Check context before starting
+	select {
+	case <-ctx.Done():
+		return []string{}
+	default:
+	}
+
 	httpClient := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps, maxRedirects)
 
 	endpointsChan := make(chan []string, 2)
@@ -61,7 +73,7 @@ func FetchEndpoints(target string, headers []string, proxyURL string, rps int, m
 
 	for _, path := range paths {
 		wg.Add(1)
-		go fetchEndpointsWorker(target, path, httpClient, endpointsChan, &wg)
+		go fetchEndpointsWorker(ctx, target, path, httpClient, endpointsChan, &wg)
 	}
 
 	go closeEndpointsChannel(&wg, endpointsChan)
@@ -82,6 +94,7 @@ func FetchEndpoints(target string, headers []string, proxyURL string, rps int, m
 }
 
 func fetchEndpointsWorker(
+	ctx context.Context,
 	target string,
 	path string,
 	httpClient *http.HTTPClientManager,
@@ -89,7 +102,7 @@ func fetchEndpointsWorker(
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
-	endpoints := fetchEndpointsFromPath(target, path, httpClient)
+	endpoints := fetchEndpointsFromPath(ctx, target, path, httpClient)
 	endpointsChan <- endpoints
 }
 

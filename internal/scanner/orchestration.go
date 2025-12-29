@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"context"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/logger"
@@ -103,10 +104,24 @@ func ScanSite(ctx ScanSiteContext) {
 	scanMode := getScanMode(ctx.Opts.ScanMode)
 	clearProgressLine(ctx.Progress, isFileScan(ctx.Opts))
 
+	// Get context from options, default to Background if not set
+	scanCtx := ctx.Opts.Context
+	if scanCtx == nil {
+		scanCtx = context.Background()
+	}
+
+	// Check context before starting
+	select {
+	case <-scanCtx.Done():
+		return
+	default:
+	}
+
 	execCtx := ScanExecutionContext{
 		Target:   ctx.Target,
 		Opts:     ctx.Opts,
 		Progress: ctx.Progress,
+		Ctx:      scanCtx,
 	}
 
 	detected, result, versions := performScan(execCtx, scanMode)
@@ -116,6 +131,13 @@ func ScanSite(ctx ScanSiteContext) {
 		return
 	}
 
+	// Check context before vulnerability check
+	select {
+	case <-scanCtx.Done():
+		return
+	default:
+	}
+
 	vulnReq := VulnerabilityCheckRequest{
 		Plugins:  result.Detected,
 		Target:   ctx.Target,
@@ -123,6 +145,7 @@ func ScanSite(ctx ScanSiteContext) {
 		Opts:     ctx.Opts,
 		Progress: ctx.Progress,
 		Versions: versions,
+		Ctx:      scanCtx,
 	}
 	entriesMap, entriesList := CheckVulnerabilities(vulnReq)
 

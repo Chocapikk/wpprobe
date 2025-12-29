@@ -52,11 +52,33 @@ func performScan(ctx ScanExecutionContext, scanMode string) ([]string, PluginDet
 }
 
 func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionResult) {
+	// Check context before starting
+	if ctx.Ctx != nil {
+		select {
+		case <-ctx.Ctx.Done():
+			return nil, PluginDetectionResult{}
+		default:
+		}
+	}
+
 	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "🔎 Discovering plugins from HTML...")
 
-	htmlSlugs, err := discoverPluginsFromHTML(ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects)
+	htmlSlugs, err := discoverPluginsFromHTML(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects)
 	if err != nil {
+		// If context was cancelled, return early
+		if ctx.Ctx != nil && ctx.Ctx.Err() != nil {
+			return nil, PluginDetectionResult{}
+		}
 		logger.DefaultLogger.Warning(fmt.Sprintf("HTML discovery failed on %s: %v", ctx.Target, err))
+	}
+
+	// Check context between steps
+	if ctx.Ctx != nil {
+		select {
+		case <-ctx.Ctx.Done():
+			return nil, PluginDetectionResult{}
+		default:
+		}
 	}
 
 	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "🔎 Scanning REST API endpoints...")
@@ -66,7 +88,7 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 		return nil, PluginDetectionResult{}
 	}
 
-	endpoints := FetchEndpoints(ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects)
+	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects)
 
 	resultCtx := DetectionResultContext{
 		Endpoints:     endpoints,

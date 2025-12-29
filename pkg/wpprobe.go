@@ -211,8 +211,9 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		PluginList:     cfg.PluginList,
 		NoCheckVersion: cfg.NoCheckVersion,
 		MaxRedirects:   maxRedirects,
-		File:           "api", // Set File to disable progress bar display
-		Verbose:        cfg.Verbose, // Use Verbose from config (default: false)
+		File:           "api",        // Set File to disable progress bar display
+		Verbose:        cfg.Verbose,  // Use Verbose from config (default: false)
+		Context:        cfg.Context,  // Propagate context for cancellation
 	}
 
 	writer := file.NewMemoryWriter()

@@ -41,8 +41,9 @@ type ScanOptions struct {
 	PluginList     string
 	Headers        []string
 	Proxy          string
-	RateLimit      int // Requests per second (0 = unlimited)
-	MaxRedirects   int // Maximum redirects to follow (0 = disable, -1 = default: 10)
+	RateLimit      int             // Requests per second (0 = unlimited)
+	MaxRedirects   int             // Maximum redirects to follow (0 = disable, -1 = default: 10)
+	Context        context.Context // Context for cancellation
 }
 
 // PluginData contains information about a detected plugin.
@@ -101,10 +102,11 @@ type PluginDisplayData struct {
 
 // HTTPConfig contains HTTP-related configuration.
 type HTTPConfig struct {
-	Headers     []string
-	Proxy       string
-	RateLimit   int // Requests per second (0 = unlimited)
-	MaxRedirects int // Maximum redirects to follow (0 = disable, -1 = default: 10)
+	Headers      []string
+	Proxy        string
+	RateLimit    int             // Requests per second (0 = unlimited)
+	MaxRedirects int             // Maximum redirects to follow (0 = disable, -1 = default: 10)
+	Context      context.Context // Context for cancellation
 }
 
 // ScanContext contains context for scanning operations.
@@ -159,17 +161,19 @@ type VulnerabilityCheckRequest struct {
 	Opts     ScanOptions
 	Progress *progress.ProgressManager
 	Versions map[string]string
+	Ctx      context.Context // Context for cancellation
 }
 
 // VulnerabilityCheckContext contains context for vulnerability checking.
 type VulnerabilityCheckContext struct {
 	ScanContext
 	SyncContext
-	EntriesMap      *map[string]string
-	EntriesList     *[]file.PluginEntry
-	Vulnerabilities []wordfence.Vulnerability
-	VulnIndex       map[string][]wordfence.Vulnerability // Indexed by plugin slug for fast lookup
+	EntriesMap          *map[string]string
+	EntriesList         *[]file.PluginEntry
+	Vulnerabilities     []wordfence.Vulnerability
+	VulnIndex           map[string][]wordfence.Vulnerability // Indexed by plugin slug for fast lookup
 	PreDetectedVersions map[string]string
+	Ctx                 context.Context // Context for cancellation
 }
 
 // ScanExecutionConfig contains all configuration for executing multiple scans.
@@ -194,6 +198,7 @@ type ScanExecutionContext struct {
 	Target   string
 	Opts     ScanOptions
 	Progress *progress.ProgressManager
+	Ctx      context.Context
 }
 
 // ScanSiteContext contains all context needed for scanning a single site.

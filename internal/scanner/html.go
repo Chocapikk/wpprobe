@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"context"
 	"io"
 	"regexp"
 	"strings"
@@ -30,17 +31,35 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-func discoverPluginsFromHTML(target string, headers []string, proxyURL string, rps int, maxRedirects int) ([]string, error) {
+func discoverPluginsFromHTML(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Check context before starting
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	normalized := http.NormalizeURL(target)
 	client := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps, maxRedirects)
 
 	slugsSet := make(map[string]struct{})
 
-	if body, err := client.Get(normalized + "/"); err == nil {
+	if body, err := client.GetWithContext(ctx, normalized+"/"); err == nil {
 		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
 	}
 
-	if body, err := client.Get(normalized + "/wp-content/uploads/"); err == nil {
+	// Check context between requests
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	if body, err := client.GetWithContext(ctx, normalized+"/wp-content/uploads/"); err == nil {
 		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
 	}
 
