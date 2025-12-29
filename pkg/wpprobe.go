@@ -23,6 +23,7 @@ package wpprobe
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
@@ -113,6 +114,12 @@ type Vulnerability struct {
 
 	// Affected version range
 	AffectedVersion string
+
+	// CVSS score (0-10)
+	CVSSScore float64
+
+	// CVSS vector string
+	CVSSVector string
 }
 
 // ScanResult contains the complete scan results.
@@ -228,6 +235,7 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 
 // buildResult converts internal file entries to public API results.
 // Only includes vulnerabilities for plugins with known versions (not "unknown" or empty).
+// Deduplicates CVEs by severity level to avoid duplicates.
 func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanResult {
 	result := &ScanResult{
 		Target:  target,
@@ -236,6 +244,8 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 	}
 
 	pluginMap := make(map[string]*PluginResult)
+	// Track seen CVEs per plugin per severity to deduplicate
+	seenCVEs := make(map[string]map[string]map[string]bool) // plugin -> severity -> cve -> seen
 
 	for _, entry := range entries {
 		// Skip vulnerabilities if version is unknown or empty
@@ -259,18 +269,36 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 				},
 			}
 			pluginMap[entry.Plugin] = plugin
+			seenCVEs[entry.Plugin] = make(map[string]map[string]bool)
 		}
 
 		cve := ""
 		if len(entry.CVEs) > 0 {
 			cve = entry.CVEs[0]
 		}
+
+		// Skip if CVE is empty or already seen for this plugin/severity
+		if cve == "" {
+			continue
+		}
+		
+		if seenCVEs[entry.Plugin][entry.Severity] == nil {
+			seenCVEs[entry.Plugin][entry.Severity] = make(map[string]bool)
+		}
+		cveLower := strings.ToLower(cve)
+		if seenCVEs[entry.Plugin][entry.Severity][cveLower] {
+			continue
+		}
+		seenCVEs[entry.Plugin][entry.Severity][cveLower] = true
+
 		vuln := Vulnerability{
 			CVE:             cve,
 			Title:           entry.Title,
 			Severity:        entry.Severity,
 			AuthType:        entry.AuthType,
 			AffectedVersion: entry.Version,
+			CVSSScore:       entry.CVSSScore,
+			CVSSVector:      entry.CVSSVector,
 		}
 
 		switch entry.Severity {
