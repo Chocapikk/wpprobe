@@ -359,20 +359,23 @@ func UpdateDatabases() error {
 // Reload reloads vulnerabilities from the database files.
 // Call this after UpdateDatabases() to use the newly downloaded data.
 func (s *Scanner) Reload() error {
+	// Reset global cache to force reload from files
+	vulnerability.ReloadVulnerabilityCache()
+
 	allVulns := []vulnerability.Vulnerability{}
-	
+
 	// Try to load Wordfence vulnerabilities, but don't fail if not available
 	wordfenceVulns, err := vulnerability.LoadWordfenceVulnerabilities()
 	if err == nil {
 		allVulns = append(allVulns, wordfenceVulns...)
 	}
-	
+
 	// Try to load WPScan vulnerabilities, but don't fail if not available
 	wpscanVulns, err := vulnerability.LoadWPScanVulnerabilities()
 	if err == nil {
 		allVulns = append(allVulns, wpscanVulns...)
 	}
-	
+
 	s.vulns = allVulns
 	return nil
 }

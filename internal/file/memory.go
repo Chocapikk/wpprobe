@@ -32,7 +32,7 @@ type MemoryWriter struct {
 // NewMemoryWriter creates a new memory writer.
 func NewMemoryWriter() *MemoryWriter {
 	return &MemoryWriter{
-		results: make([]PluginEntry, 0),
+		results: make([]PluginEntry, 0, 32), // Pre-allocate for typical scan size
 	}
 }
 
@@ -44,16 +44,18 @@ func (m *MemoryWriter) WriteResults(url string, results []PluginEntry) {
 }
 
 // GetResults returns all stored results.
+// Note: Returns the internal slice directly for performance.
+// Caller should not modify the returned slice.
 func (m *MemoryWriter) GetResults() []PluginEntry {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make([]PluginEntry, len(m.results))
-	copy(result, m.results)
-	return result
+	return m.results
 }
 
-// Close is a no-op for memory writer.
+// Close clears the results to free memory.
 func (m *MemoryWriter) Close() {
-	// Nothing to close
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.results = nil
 }
 

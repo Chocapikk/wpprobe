@@ -173,15 +173,37 @@ func TestGetVulnerabilitiesForPlugin(t *testing.T) {
 		t.Fatalf("Failed to get storage path: %v", err)
 	}
 
-	file, err := os.Create(outputPath)
+	// Backup existing file if it exists
+	backupPath := outputPath + ".backup"
+	if _, err := os.Stat(outputPath); err == nil {
+		if err := os.Rename(outputPath, backupPath); err != nil {
+			t.Fatalf("Failed to backup existing file: %v", err)
+		}
+		defer func() {
+			// Restore backup after test
+			_ = os.Remove(outputPath)
+			_ = os.Rename(backupPath, outputPath)
+			vulnerability.ReloadVulnerabilityCache()
+		}()
+	} else {
+		defer func() {
+			_ = os.Remove(outputPath)
+			vulnerability.ReloadVulnerabilityCache()
+		}()
+	}
+
+	testFile, err := os.Create(outputPath)
 	if err != nil {
 		t.Fatalf("Failed to create file: %v", err)
 	}
-	defer func() { _ = file.Close() }()
+	defer func() { _ = testFile.Close() }()
 
-	if err := json.NewEncoder(file).Encode(vulnerabilities); err != nil {
+	if err := json.NewEncoder(testFile).Encode(vulnerabilities); err != nil {
 		t.Fatalf("Failed to encode vulnerabilities: %v", err)
 	}
+
+	// Reload cache to pick up the new test file
+	vulnerability.ReloadVulnerabilityCache()
 
 	got := vulnerability.GetWordfenceVulnerabilitiesForPlugin("test-plugin", "1.5.0")
 
@@ -191,9 +213,5 @@ func TestGetVulnerabilitiesForPlugin(t *testing.T) {
 
 	if got[0].CVE != "CVE-2024-0001" {
 		t.Errorf("Expected CVE-2024-0001, got %s", got[0].CVE)
-	}
-
-	if err := os.Remove(outputPath); err != nil {
-		t.Errorf("Failed to remove test file: %v", err)
 	}
 }
