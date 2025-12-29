@@ -146,13 +146,12 @@ type VulnerabilitySummary struct {
 }
 
 // Scanner is the main scanner instance.
-type Scanner struct {
-	vulns []vulnerability.Vulnerability
-}
+// It uses the global vulnerability cache to avoid memory duplication.
+type Scanner struct{}
 
 // New creates a new Scanner instance.
-// It loads vulnerabilities from the default databases (Wordfence and WPScan if configured).
-// If databases are not available, it will continue with an empty vulnerability list.
+// The scanner uses a global vulnerability cache that is loaded once and shared
+// across all Scanner instances. This prevents memory bloat when creating many scanners.
 // Logging is disabled during vulnerability loading when called from the API.
 func New() (*Scanner, error) {
 	// Disable verbose logging during vulnerability loading
@@ -162,21 +161,12 @@ func New() (*Scanner, error) {
 		logger.DefaultLogger.Verbose = oldVerbose
 	}()
 
-	allVulns := []vulnerability.Vulnerability{}
-	
-	// Try to load Wordfence vulnerabilities, but don't fail if not available
-	wordfenceVulns, err := vulnerability.LoadWordfenceVulnerabilities()
-	if err == nil {
-		allVulns = append(allVulns, wordfenceVulns...)
-	}
-	
-	// Try to load WPScan vulnerabilities, but don't fail if not available
-	wpscanVulns, err := vulnerability.LoadWPScanVulnerabilities()
-	if err == nil {
-		allVulns = append(allVulns, wpscanVulns...)
-	}
-	
-	return &Scanner{vulns: allVulns}, nil
+	// Just trigger loading of the global cache (if not already loaded)
+	// The actual data is stored globally and shared across all scanners
+	_, _ = vulnerability.LoadWordfenceVulnerabilities()
+	_, _ = vulnerability.LoadWPScanVulnerabilities()
+
+	return &Scanner{}, nil
 }
 
 // Scan performs a WordPress scan with the given configuration.
@@ -219,12 +209,15 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 	writer := file.NewMemoryWriter()
 	defer writer.Close()
 
+	// Get vulnerabilities from global cache (no copy, just reference)
+	vulns := vulnerability.GetAllVulnerabilities()
+
 	scanCtx := scanner.ScanSiteContext{
 		Target:   cfg.Target,
 		Opts:     opts,
 		Writer:   writer,
 		Progress: nil, // No progress bar for API
-		Vulns:    s.vulns,
+		Vulns:    vulns,
 	}
 
 	scanner.ScanSite(scanCtx)
@@ -359,27 +352,17 @@ func UpdateDatabases() error {
 
 // Reload reloads vulnerabilities from the database files.
 // Call this after UpdateDatabases() to use the newly downloaded data.
+// Since all scanners share the global cache, this affects all Scanner instances.
 func (s *Scanner) Reload() error {
-	// Reset global cache to force reload from files
+	// Reset and reload the global cache
 	vulnerability.ReloadVulnerabilityCache()
 
-	allVulns := []vulnerability.Vulnerability{}
+	// Trigger reload by accessing the cache
+	_ = vulnerability.GetAllVulnerabilities()
 
-	// Try to load Wordfence vulnerabilities, but don't fail if not available
-	wordfenceVulns, err := vulnerability.LoadWordfenceVulnerabilities()
-	if err == nil {
-		allVulns = append(allVulns, wordfenceVulns...)
-	}
-
-	// Try to load WPScan vulnerabilities, but don't fail if not available
-	wpscanVulns, err := vulnerability.LoadWPScanVulnerabilities()
-	if err == nil {
-		allVulns = append(allVulns, wpscanVulns...)
-	}
-
-	s.vulns = allVulns
 	return nil
 }
+
 
 // DatabaseExists checks if the Wordfence vulnerability database file exists.
 func DatabaseExists() bool {
