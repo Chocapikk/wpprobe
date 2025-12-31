@@ -208,11 +208,14 @@ func createVulnerablePluginEntry(
 	v wordfence.Vulnerability,
 ) file.PluginEntry {
 	return file.PluginEntry{
-		Plugin:   plugin,
-		Version:  version,
-		CVEs:     []string{v.CVE},
-		Severity: v.Severity,
-		AuthType: v.AuthType,
+		Plugin:     plugin,
+		Version:    version,
+		CVEs:       []string{v.CVE},
+		Severity:   v.Severity,
+		AuthType:   v.AuthType,
+		Title:      v.Title,
+		CVSSScore:  v.CVSSScore,
+		CVSSVector: v.CVSSVector,
 	}
 }
 

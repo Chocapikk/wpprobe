@@ -4,6 +4,7 @@
 package scanner
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -104,7 +105,7 @@ func TestDiscoverPluginsFromHTML(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	slugs, err := discoverPluginsFromHTML(nil, ts.URL, nil, "", 0, -1, nil)
+	slugs, err := discoverPluginsFromHTML(context.TODO(), ts.URL, nil, "", 0, -1, nil)
 	if err != nil {
 		t.Fatalf("discoverPluginsFromHTML returned error: %v", err)
 	}

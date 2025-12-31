@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -104,7 +105,7 @@ func TestFetchEndpoints(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(tt.mockServer))
 			defer server.Close()
 
-			got := FetchEndpoints(nil, server.URL, tt.headers, "", 0, -1, nil)
+			got := FetchEndpoints(context.TODO(), server.URL, tt.headers, "", 0, -1, nil)
 
 			sort.Strings(got)
 			sort.Strings(tt.want)
