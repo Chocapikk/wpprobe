@@ -85,6 +85,7 @@ func (p *ProgressManager) Finish() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	_ = p.bar.Finish()
+	fmt.Fprintln(ansi.NewAnsiStderr())
 }
 
 // RenderBlank renders an empty bar state.
