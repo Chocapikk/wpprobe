@@ -27,7 +27,6 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
-	"github.com/Chocapikk/wpprobe/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -61,10 +60,6 @@ var scanCmd = &cobra.Command{
 		// Configure logger verbosity first
 		verbose := mustBool(cmd.Flags().GetBool("verbose"))
 		logger.DefaultLogger.Verbose = verbose
-
-		// Print banner after verbose is configured
-		_, isLatest := version.CheckLatestVersion(version.Version)
-		logger.DefaultLogger.PrintBanner(version.Version, isLatest)
 
 		outputFile := cmd.Flag("output").Value.String()
 		outputFormat := file.DetectOutputFormat(outputFile)
@@ -108,7 +103,6 @@ var scanCmd = &cobra.Command{
 		}
 
 		if opts.URL == "" && opts.File == "" {
-			logger.DefaultLogger.Error("You must provide either --url or --file")
 			return fmt.Errorf("you must provide either --url or --file")
 		}
 

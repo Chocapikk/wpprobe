@@ -113,7 +113,7 @@ func buildSummaryLine(
 }
 
 func DisplayResults(ctx DisplayResultsContext) {
-	if isFileScan(ctx.Opts) {
+	if isFileScan(ctx.Opts) && ctx.Opts.Output != "" {
 		return
 	}
 	if len(ctx.Detected) == 0 {
