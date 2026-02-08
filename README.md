@@ -19,7 +19,7 @@ A fast WordPress plugin scanner that detects installed plugins via REST API enum
 
 ## Quick Start
 
-```bash
+```sh
 go install github.com/Chocapikk/wpprobe@latest
 wpprobe update-db
 wpprobe scan -u https://example.com
@@ -33,7 +33,7 @@ wpprobe scan -u https://example.com
 | `bruteforce` | Direct directory checks | Low | 10k+ plugins |
 | `hybrid` | Stealthy first, then brute-force | Medium | Maximum |
 
-```bash
+```sh
 wpprobe scan -u https://example.com --mode stealthy
 wpprobe scan -u https://example.com --mode bruteforce
 wpprobe scan -u https://example.com --mode hybrid
@@ -41,7 +41,7 @@ wpprobe scan -u https://example.com --mode hybrid
 
 ## Installation
 
-```bash
+```sh
 # Go (requires 1.22+)
 go install github.com/Chocapikk/wpprobe@latest
 
@@ -58,7 +58,7 @@ git clone https://github.com/Chocapikk/wpprobe && cd wpprobe && go build -o wppr
 <details>
 <summary>Docker with file mounting</summary>
 
-```bash
+```sh
 # Mount current directory for input/output files
 docker run -it --rm -v $(pwd):/data wpprobe scan -f /data/targets.txt -o /data/results.csv
 
@@ -81,7 +81,7 @@ docker run -it --rm \
 
 ### Scanning
 
-```bash
+```sh
 # Single target
 wpprobe scan -u https://example.com
 
@@ -102,7 +102,7 @@ wpprobe scan -u https://example.com -o results.json
 
 ### Vulnerability Database
 
-```bash
+```sh
 # Update databases (Wordfence is free, WPScan requires Enterprise API token)
 wpprobe update-db
 
@@ -121,7 +121,7 @@ Set `WPSCAN_API_TOKEN` for WPScan database updates (Enterprise plan only). Wordf
 
 ### Self-Update
 
-```bash
+```sh
 wpprobe update
 ```
 
