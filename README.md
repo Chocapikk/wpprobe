@@ -1,10 +1,14 @@
-![WPProbe](./images/logo.jpg)
+<p align="center">
+  <img src="./images/logo.jpg" width="400" alt="WPProbe" />
+</p>
 
-**"Because why scan blind when WordPress exposes itself?"**
+<p align="center"><b>"Because why scan blind when WordPress exposes itself?"</b></p>
 
 ---
 
-![WPProbe](./images/wpprobe.png)
+<p align="center">
+  <img src="./images/wpprobe.png" width="700" alt="WPProbe" />
+</p>
 
 [![Go CI](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml)
 [![Latest Release](https://img.shields.io/github/v/release/Chocapikk/wpprobe)](https://github.com/Chocapikk/wpprobe/releases/latest)
