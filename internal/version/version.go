@@ -98,10 +98,7 @@ func CheckPluginExists(ctx context.Context, client *http.HTTPClientManager, targ
 	if err != nil {
 		return false
 	}
-	if status == 403 {
-		return true
-	}
-	return status == 200 && strings.Contains(strings.ToLower(body), "readme.txt")
+	return status == 403 || (status == 200 && strings.Contains(strings.ToLower(body), "readme.txt"))
 }
 
 func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager, target, plugin string) string {
