@@ -27,6 +27,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	wphttp "github.com/Chocapikk/wpprobe/internal/http"
 )
 
 func TestFetchEndpoints(t *testing.T) {
@@ -105,7 +107,7 @@ func TestFetchEndpoints(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(tt.mockServer))
 			defer server.Close()
 
-			got := FetchEndpoints(context.TODO(), server.URL, tt.headers, "", 0, -1, nil)
+			got := FetchEndpoints(context.TODO(), server.URL, wphttp.Config{Headers: tt.headers, MaxRedirects: -1})
 
 			sort.Strings(got)
 			sort.Strings(tt.want)

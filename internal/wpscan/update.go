@@ -224,8 +224,8 @@ func processWPScanPluginData(pluginSlug string, data map[string]interface{}) ([]
 		introducedIn, _ := vulnMap["introduced_in"].(string)
 		fromVersion, toVersion, fromInclusive, toInclusive := determineVersionRange(introducedIn, fixedIn)
 		cvssScore, cvssVector := extractCVSS(vulnMap)
-		severity := determineSeverity(cvssScore, title)
-		authType := determineAuthType(cvssVector, title)
+		severity := vulnerability.DetermineSeverity(cvssScore, title)
+		authType := vulnerability.DetermineAuthType(cvssVector, title)
 		cveLink := vulnerability.BuildCVELink(cve)
 		versionLabel := fmt.Sprintf("%s - %s", fromVersion, toVersion)
 
@@ -300,18 +300,3 @@ func extractCVSS(vulnMap map[string]interface{}) (float64, string) {
 	return cvssScore, cvssVector
 }
 
-func determineSeverity(cvssScore float64, title string) string {
-	severity := vulnerability.DetermineSeverityFromCVSS(cvssScore)
-	if severity == "unknown" {
-		severity = vulnerability.DetermineSeverityFromTitle(title)
-	}
-	return severity
-}
-
-func determineAuthType(cvssVector string, title string) string {
-	authType := vulnerability.DetermineAuthTypeFromCVSS(cvssVector)
-	if authType == "" {
-		authType = vulnerability.DetermineAuthTypeFromTitle(title)
-	}
-	return authType
-}

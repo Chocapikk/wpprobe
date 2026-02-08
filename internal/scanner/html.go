@@ -22,7 +22,6 @@ package scanner
 import (
 	"context"
 	"io"
-	stdhttp "net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -32,12 +31,13 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-func discoverPluginsFromHTML(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int, externalClient *stdhttp.Client) ([]string, error) {
+var slugPattern = regexp.MustCompile(`(?i)^[a-z][a-z0-9_-]*$`)
+
+func discoverPluginsFromHTML(ctx context.Context, target string, cfg http.Config) ([]string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	// Check context before starting
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -45,12 +45,7 @@ func discoverPluginsFromHTML(ctx context.Context, target string, headers []strin
 	}
 
 	normalized := http.NormalizeURL(target)
-	var client *http.HTTPClientManager
-	if externalClient != nil {
-		client = http.NewHTTPClientFromExternal(externalClient, headers, rps)
-	} else {
-		client = http.NewHTTPClient(5*time.Second, headers, proxyURL, rps, maxRedirects)
-	}
+	client := cfg.NewClient(5 * time.Second)
 
 	slugsSet := make(map[string]struct{})
 
@@ -65,11 +60,22 @@ func discoverPluginsFromHTML(ctx context.Context, target string, headers []strin
 	default:
 	}
 
+	if body, err := client.GetWithContext(ctx, normalized+"/feed/"); err == nil {
+		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
+	}
+
+	// Check context between requests
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	if body, err := client.GetWithContext(ctx, normalized+"/wp-content/uploads/"); err == nil {
 		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
 	}
 
-	var slugs []string
+	slugs := make([]string, 0, len(slugsSet))
 	for slug := range slugsSet {
 		slugs = append(slugs, slug)
 	}
@@ -77,7 +83,6 @@ func discoverPluginsFromHTML(ctx context.Context, target string, headers []strin
 }
 
 func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
-	var slugPattern = regexp.MustCompile(`(?i)^[a-z][a-z0-9_-]*$`)
 
 	z := html.NewTokenizer(r)
 	for {

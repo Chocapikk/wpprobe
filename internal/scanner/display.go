@@ -90,18 +90,20 @@ func buildSummaryLine(
 	vulnTypes []string,
 	vulnStyles map[string]lipgloss.Style,
 ) string {
-	getCount := map[string]func(VulnCategories) int{
-		"Critical": getCriticalCount,
-		"High":     getHighCount,
-		"Medium":   getMediumCount,
-		"Low":      getLowCount,
-	}
-
 	var summaryParts []string
 	for _, t := range vulnTypes {
 		var total int
 		for _, cat := range pluginVulns {
-			total += getCount[t](cat)
+			switch t {
+			case "Critical":
+				total += len(cat.Critical)
+			case "High":
+				total += len(cat.High)
+			case "Medium":
+				total += len(cat.Medium)
+			case "Low":
+				total += len(cat.Low)
+			}
 		}
 		summaryParts = append(summaryParts, fmt.Sprintf("%s: %d", vulnStyles[t].Render(t), total))
 	}
@@ -297,22 +299,6 @@ func getPluginColor(version string, v VulnCategories, ok bool) lipgloss.Style {
 	default:
 		return NoVulnStyle
 	}
-}
-
-func getCriticalCount(v VulnCategories) int {
-	return len(v.Critical)
-}
-
-func getHighCount(v VulnCategories) int {
-	return len(v.High)
-}
-
-func getMediumCount(v VulnCategories) int {
-	return len(v.Medium)
-}
-
-func getLowCount(v VulnCategories) int {
-	return len(v.Low)
 }
 
 func comparePlugins(i, j int, plugins []PluginDisplayData) bool {

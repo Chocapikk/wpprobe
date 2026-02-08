@@ -22,7 +22,6 @@ package version
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	nethttp "net/http"
 	"regexp"
 	"strings"
@@ -33,6 +32,10 @@ import (
 )
 
 var tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
+
+var versionRegex = regexp.MustCompile(`(?:Stable tag|Version):\s*([0-9A-Za-z.\-]+)`)
+
+var readmeNames = []string{"readme.txt", "Readme.txt", "README.txt"}
 
 func CheckLatestVersion(currentVersion string) (string, bool) {
 	resp, err := nethttp.Get(tagsURL)
@@ -71,40 +74,42 @@ func CheckLatestVersion(currentVersion string) (string, bool) {
 	return latest.String(), curr.Compare(latest) >= 0
 }
 
-func GetPluginVersion(
-	target, plugin string,
-	headers []string,
-	proxyURL string,
-	rps int,
-	maxRedirects int,
-) string {
-	return GetPluginVersionWithContext(context.Background(), target, plugin, headers, proxyURL, rps, maxRedirects)
+func GetPluginVersion(target, plugin string, cfg http.Config) string {
+	return GetPluginVersionWithContext(context.Background(), target, plugin, cfg)
 }
 
-func GetPluginVersionWithContext(
-	ctx context.Context,
-	target, plugin string,
-	headers []string,
-	proxyURL string,
-	rps int,
-	maxRedirects int,
-) string {
-	httpClient := http.NewHTTPClient(10*time.Second, headers, proxyURL, rps, maxRedirects)
+func GetPluginVersionWithContext(ctx context.Context, target, plugin string, cfg http.Config) string {
+	httpClient := cfg.NewClient(10 * time.Second)
 	return fetchVersionFromReadme(ctx, httpClient, target, plugin)
 }
 
+// GetPluginVersionWithClient uses an existing HTTP client instead of creating a new one.
+func GetPluginVersionWithClient(ctx context.Context, client *http.HTTPClientManager, target, plugin string) string {
+	return fetchVersionFromReadme(ctx, client, target, plugin)
+}
+
+// CheckPluginExists checks if a plugin directory exists via HEAD request.
+// Returns true if the server responds with 200 or 403 (directory exists but listing forbidden).
+func CheckPluginExists(ctx context.Context, client *http.HTTPClientManager, target, plugin string) bool {
+	url := target + "/wp-content/plugins/" + plugin + "/"
+	status, err := client.HeadWithContext(ctx, url)
+	if err != nil {
+		return false
+	}
+	return status == 200 || status == 403
+}
+
 func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager, target, plugin string) string {
-	readmes := []string{"readme.txt", "Readme.txt", "README.txt"}
-	for _, name := range readmes {
+	base := target + "/wp-content/plugins/" + plugin + "/"
+	for _, name := range readmeNames {
 		select {
 		case <-ctx.Done():
 			return "unknown"
 		default:
 		}
-		url := fmt.Sprintf("%s/wp-content/plugins/%s/%s", target, plugin, name)
+		url := base + name
 		if body, err := client.GetWithContext(ctx, url); err == nil {
-			re := regexp.MustCompile(`(?:Stable tag|Version):\s*([0-9A-Za-z.\-]+)`)
-			if m := re.FindStringSubmatch(body); len(m) > 1 {
+			if m := versionRegex.FindStringSubmatch(body); len(m) > 1 {
 				return strings.TrimSpace(m[1])
 			}
 		} else if ctx.Err() != nil {

@@ -58,21 +58,17 @@ func formatAuthTypeTitle(auth string) string {
 	return cases.Title(language.Und).String(auth)
 }
 
-// getSeverityOrder returns the severity ordering map used for sorting.
-func getSeverityOrder() map[string]int {
-	return map[string]int{
-		"critical": 1,
-		"high":     2,
-		"medium":   3,
-		"low":      4,
-		"unknown":  5,
-		"N/A":      6,
-	}
+var severityOrder = map[string]int{
+	"critical": 1,
+	"high":     2,
+	"medium":   3,
+	"low":      4,
+	"unknown":  5,
+	"N/A":      6,
 }
 
 // sortResultsBySeverity sorts plugin entries by severity and auth type.
 func sortResultsBySeverity(results []PluginEntry) {
-	severityOrder := getSeverityOrder()
 	sort.Slice(results, func(i, j int) bool {
 		si, sj := severityOrder[results[i].Severity], severityOrder[results[j].Severity]
 		if si != sj {
@@ -154,7 +150,6 @@ func containsVulnerability(vulns []Vulnerability, cve string) bool {
 
 // sortSeveritiesByOrder sorts severities using the severity order map.
 func sortSeveritiesByOrder(severities []SeverityEntry) {
-	severityOrder := getSeverityOrder()
 	sort.Slice(severities, func(i, j int) bool {
 		return severityOrder[strings.ToLower(severities[i].Severity)] <
 			severityOrder[strings.ToLower(severities[j].Severity)]
@@ -249,15 +244,12 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	defer j.mu.Unlock()
 
 	pluginResultsMap := make(map[string]*PluginResult)
-	detectedPlugins := make(map[string]bool)
 
 	for _, entry := range results {
 		pluginName := entry.Plugin
 		version := entry.Version
 		severity := entry.Severity
 		auth := strings.ToLower(entry.AuthType)
-
-		detectedPlugins[pluginName] = true
 
 		pr, ok := pluginResultsMap[pluginName]
 		if !ok {
@@ -282,20 +274,6 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 		}
 
 		sortSeveritiesByOrder(vg.Severities)
-	}
-
-	for pluginName := range detectedPlugins {
-		if _, exists := pluginResultsMap[pluginName]; !exists {
-			pluginResultsMap[pluginName] = &PluginResult{
-				Name: pluginName,
-				Versions: []VersionGroup{
-					{
-						Version:    "unknown",
-						Severities: []SeverityEntry{},
-					},
-				},
-			}
-		}
 	}
 
 	var pluginsColl PluginsCollection

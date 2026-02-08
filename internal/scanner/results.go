@@ -39,10 +39,10 @@ func loadEndpointsData() (map[string][]string, error) {
 	return endpointsData, nil
 }
 
-func buildDetectionResult(ctx DetectionResultContext) PluginDetectionResult {
+func buildDetectionResult(endpoints []string, endpointsData map[string][]string, htmlSlugs []string) PluginDetectionResult {
 	var result PluginDetectionResult
-	if len(ctx.Endpoints) > 0 {
-		result = DetectPlugins(ctx.Endpoints, ctx.EndpointsData)
+	if len(endpoints) > 0 {
+		result = DetectPlugins(endpoints, endpointsData)
 	} else {
 		result = PluginDetectionResult{
 			Plugins:  make(map[string]*PluginData),
@@ -50,7 +50,7 @@ func buildDetectionResult(ctx DetectionResultContext) PluginDetectionResult {
 		}
 	}
 
-	for _, slug := range ctx.HTMLSlugs {
+	for _, slug := range htmlSlugs {
 		if _, exists := result.Plugins[slug]; !exists {
 			result.Plugins[slug] = &PluginData{
 				Score:      1,
@@ -101,12 +101,12 @@ func calculateRemainingPlugins(stealthyList []string, opts ScanOptions) []string
 	return remaining
 }
 
-func combineHybridResults(ctx HybridResultContext) ([]string, PluginDetectionResult) {
-	combined := append([]string{}, ctx.StealthyList...)
-	combined = append(combined, ctx.Brutefound...)
+func combineHybridResults(stealthyList []string, stealthyRes PluginDetectionResult, brutefound []string) ([]string, PluginDetectionResult) {
+	combined := append([]string{}, stealthyList...)
+	combined = append(combined, brutefound...)
 
-	result := ctx.StealthyRes
-	for _, p := range ctx.Brutefound {
+	result := stealthyRes
+	for _, p := range brutefound {
 		result.Plugins[p] = &PluginData{
 			Score:      1,
 			Confidence: 100.0,
@@ -119,9 +119,9 @@ func combineHybridResults(ctx HybridResultContext) ([]string, PluginDetectionRes
 	return combined, result
 }
 
-func writeResults(ctx WriteResultsContext) {
-	if ctx.Writer != nil {
-		ctx.Writer.WriteResults(ctx.Target, ctx.Entries)
+func writeResults(writer file.WriterInterface, target string, entries []file.PluginEntry) {
+	if writer != nil {
+		writer.WriteResults(target, entries)
 	}
 }
 
@@ -131,11 +131,6 @@ func handleNoPluginsDetected(ctx ScanSiteContext) {
 		logger.DefaultLogger.Warning("No plugins detected on " + ctx.Target)
 	}
 
-	writeCtx := WriteResultsContext{
-		Writer:  ctx.Writer,
-		Target:  ctx.Target,
-		Entries: []file.PluginEntry{},
-	}
-	writeResults(writeCtx)
+	writeResults(ctx.Writer, ctx.Target, []file.PluginEntry{})
 }
 

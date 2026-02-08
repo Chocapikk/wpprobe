@@ -30,7 +30,6 @@ import (
 
 	"github.com/Chocapikk/wpprobe/internal/http"
 	"github.com/Chocapikk/wpprobe/internal/logger"
-	"github.com/Chocapikk/wpprobe/internal/progress"
 	"github.com/Chocapikk/wpprobe/internal/version"
 )
 
@@ -43,6 +42,8 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 	}
 
 	normalized := http.NormalizeURL(req.Target)
+	sharedClient := req.HTTP.NewClient(10 * time.Second)
+	sharedClient.EnableKeepAlives(req.Threads)
 	var detected []string
 	versions := make(map[string]string)
 	var mu sync.Mutex
@@ -67,15 +68,13 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 			HTTP:     req.HTTP,
 			Progress: req.Progress,
 		},
-		SyncContext: SyncContext{
-			Mu:  &mu,
-			Wg:  &wg,
-			Sem: sem,
-		},
+		Mu:       &mu,
+		Wg:       &wg,
+		Sem:      sem,
 		Detected: &detected,
 		Versions: &versions,
 		Ctx:      ctx,
-		Cancel:   cancel,
+		Client:   sharedClient,
 	}
 
 pluginLoop:
@@ -154,7 +153,7 @@ func HybridScan(req HybridScanRequest) ([]string, map[string]string) {
 func scanPlugin(plugin string, ctx BruteforceContext) {
 	defer ctx.Wg.Done()
 	defer releaseSemaphore(ctx.Sem)
-	defer handlePanic(plugin)
+	defer recoverPanic("plugin " + plugin)
 
 	select {
 	case <-ctx.Ctx.Done():
@@ -162,78 +161,42 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 	default:
 	}
 
-	updateProgressMessage(ctx.Progress, plugin)
+	if ctx.Progress != nil {
+		ctx.Progress.SetMessage(fmt.Sprintf("Bruteforcing plugin %-30.30s", plugin))
+	}
 
-	select {
-	case <-ctx.Ctx.Done():
-		return
-	default:
-		version := version.GetPluginVersionWithContext(ctx.Ctx, ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit, ctx.HTTP.MaxRedirects)
-
-		select {
-		case <-ctx.Ctx.Done():
-			return
-		default:
-		}
-
-		if version == "" || version == "unknown" {
-			incrementProgress(ctx.Progress)
-			return
-		}
-
-		handlePluginFound(plugin, version, ctx.Progress, ctx.Mu, ctx.Detected, ctx.Versions, ctx.Cancel)
+	// Phase 1: quick HEAD check on plugin directory (403/200 = exists, 404 = skip)
+	if !version.CheckPluginExists(ctx.Ctx, ctx.Client, ctx.Target, plugin) {
 		incrementProgress(ctx.Progress)
-	}
-}
-
-func handlePanic(plugin string) {
-	if r := recover(); r != nil {
-		logger.DefaultLogger.Error(
-			fmt.Sprintf("Panic while scanning plugin %s: %v", plugin, r),
-		)
-	}
-}
-
-func updateProgressMessage(progress *progress.ProgressManager, plugin string) {
-	if progress == nil {
 		return
 	}
-	progress.SetMessage(fmt.Sprintf("🔎 Bruteforcing plugin %-30.30s", plugin))
-}
 
-func handlePluginFound(
-	plugin string,
-	version string,
-	progress *progress.ProgressManager,
-	mu *sync.Mutex,
-	detected *[]string,
-	versions *map[string]string,
-	cancel context.CancelFunc,
-) {
-	if progress != nil {
-		progress.ClearLine()
-	}
-	logger.DefaultLogger.Info(fmt.Sprintf("Found plugin %s version %s", plugin, version))
-	if progress != nil {
-		progress.RenderBlank()
-	}
-
-	mu.Lock()
-	*detected = append(*detected, plugin)
-	if versions != nil {
-		(*versions)[plugin] = version
-	}
-	mu.Unlock()
-
-	if cancel != nil {
-		logger.DefaultLogger.Info("Plugin found, stopping bruteforce scan to display results...")
-		cancel()
-	}
-}
-
-func incrementProgress(progress *progress.ProgressManager) {
-	if progress == nil {
+	select {
+	case <-ctx.Ctx.Done():
 		return
+	default:
 	}
-	progress.Increment()
+
+	// Phase 2: fetch readme.txt for version (only for plugins that exist)
+	ver := version.GetPluginVersionWithClient(ctx.Ctx, ctx.Client, ctx.Target, plugin)
+	if ver == "" || ver == "unknown" {
+		ver = "unknown"
+	}
+
+	recordPluginFound(plugin, ver, ctx)
+	incrementProgress(ctx.Progress)
+}
+
+func recordPluginFound(plugin, ver string, ctx BruteforceContext) {
+	msg := "Found plugin " + plugin + " version " + ver
+	if ctx.Progress != nil {
+		_, _ = ctx.Progress.Bprintln(logger.FormatSuccess(msg))
+	} else {
+		logger.DefaultLogger.Success(msg)
+	}
+
+	ctx.Mu.Lock()
+	*ctx.Detected = append(*ctx.Detected, plugin)
+	(*ctx.Versions)[plugin] = ver
+	ctx.Mu.Unlock()
 }

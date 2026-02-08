@@ -24,7 +24,6 @@ import (
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
-	"github.com/Chocapikk/wpprobe/internal/progress"
 	versionpkg "github.com/Chocapikk/wpprobe/internal/version"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 )
@@ -50,14 +49,12 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 		ScanContext: ScanContext{
 			Target:   req.Target,
 			Threads:  req.Opts.Threads,
-			HTTP:     HTTPConfig{Headers: req.Opts.Headers, Proxy: req.Opts.Proxy, RateLimit: req.Opts.RateLimit, MaxRedirects: req.Opts.MaxRedirects},
+			HTTP:     HTTPConfigFromOpts(req.Opts),
 			Progress: req.Progress,
 		},
-		SyncContext: SyncContext{
-			Mu:  &mu,
-			Wg:  &wg,
-			Sem: sem,
-		},
+		Mu:                  &mu,
+		Wg:                  &wg,
+		Sem:                 sem,
 		EntriesMap:          &entriesMap,
 		EntriesList:         &entriesList,
 		Vulnerabilities:     req.Vulns,
@@ -76,13 +73,12 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 	return entriesMap, entriesList
 }
 
-// buildVulnerabilityIndex creates a map of vulnerabilities indexed by plugin slug for fast lookup.
-func buildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]wordfence.Vulnerability {
-	index := make(map[string][]wordfence.Vulnerability)
+// buildVulnerabilityIndex creates a map of vulnerability pointers indexed by plugin slug for fast lookup.
+func buildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]*wordfence.Vulnerability {
+	index := make(map[string][]*wordfence.Vulnerability)
 	for i := range vulns {
-		slug := vulns[i].Slug
-		if slug != "" {
-			index[slug] = append(index[slug], vulns[i])
+		if vulns[i].Slug != "" {
+			index[vulns[i].Slug] = append(index[vulns[i].Slug], &vulns[i])
 		}
 	}
 	return index
@@ -95,7 +91,7 @@ func checkPluginVulnerabilities(
 ) {
 	defer ctx.Wg.Done()
 	defer releaseSemaphore(ctx.Sem)
-	defer recoverFromPanic()
+	defer recoverPanic("plugin " + plugin)
 
 	version := getPluginVersion(plugin, opts, ctx, ctx.PreDetectedVersions)
 	matched := findMatchingVulnerabilities(plugin, version, ctx.VulnIndex)
@@ -108,7 +104,9 @@ func checkPluginVulnerabilities(
 	ctx.Mu.Unlock()
 
 	// Update progress outside of mutex lock
-	incrementProgressIfNeeded(ctx.Progress, opts)
+	if opts.File == "" {
+		incrementProgress(ctx.Progress)
+	}
 }
 
 func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckContext, preDetectedVersions map[string]string) string {
@@ -120,35 +118,28 @@ func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckCon
 			return version
 		}
 	}
-	maxRedirects := ctx.HTTP.MaxRedirects
-	if maxRedirects == 0 {
-		maxRedirects = -1
+	cfg := ctx.HTTP
+	if cfg.MaxRedirects == 0 {
+		cfg.MaxRedirects = -1
 	}
 	scanCtx := ctx.Ctx
 	if scanCtx == nil {
 		scanCtx = context.Background()
 	}
-	return versionpkg.GetPluginVersionWithContext(scanCtx, ctx.Target, plugin, ctx.HTTP.Headers, ctx.HTTP.Proxy, ctx.HTTP.RateLimit, maxRedirects)
+	return versionpkg.GetPluginVersionWithContext(scanCtx, ctx.Target, plugin, cfg)
 }
 
 func findMatchingVulnerabilities(
 	plugin string,
 	version string,
-	vulnIndex map[string][]wordfence.Vulnerability,
-) []wordfence.Vulnerability {
+	vulnIndex map[string][]*wordfence.Vulnerability,
+) []*wordfence.Vulnerability {
 	pluginVulns, exists := vulnIndex[plugin]
-	if !exists {
-		return []wordfence.Vulnerability{}
+	if !exists || version == "" || version == "unknown" {
+		return nil
 	}
 
-	var matched []wordfence.Vulnerability
-	if version == "" || version == "unknown" {
-		// If version is unknown, we cannot verify vulnerabilities
-		// Vulnerabilities must be based on the detected version in the database
-		return []wordfence.Vulnerability{}
-	}
-
-	// Filter by version
+	var matched []*wordfence.Vulnerability
 	for _, v := range pluginVulns {
 		if versionpkg.IsVersionVulnerable(version, v.FromVersion, v.ToVersion) {
 			matched = append(matched, v)
@@ -160,25 +151,21 @@ func findMatchingVulnerabilities(
 func buildPluginEntries(
 	plugin string,
 	version string,
-	matched []wordfence.Vulnerability,
+	matched []*wordfence.Vulnerability,
 ) []file.PluginEntry {
 	if len(matched) == 0 {
 		return []file.PluginEntry{createEmptyPluginEntry(plugin, version)}
 	}
 
-	seenCVEs := make(map[string]bool)
-	var entries []file.PluginEntry
+	seenCVEs := make(map[string]bool, len(matched))
+	entries := make([]file.PluginEntry, 0, len(matched))
 
 	for _, v := range matched {
 		cve := v.CVE
 		if cve == "" {
 			cve = v.Title
 		}
-		if cve == "" {
-			continue
-		}
-
-		if seenCVEs[cve] {
+		if cve == "" || seenCVEs[cve] {
 			continue
 		}
 		seenCVEs[cve] = true
@@ -205,7 +192,7 @@ func createEmptyPluginEntry(plugin, version string) file.PluginEntry {
 func createVulnerablePluginEntry(
 	plugin string,
 	version string,
-	v wordfence.Vulnerability,
+	v *wordfence.Vulnerability,
 ) file.PluginEntry {
 	return file.PluginEntry{
 		Plugin:     plugin,
@@ -219,8 +206,3 @@ func createVulnerablePluginEntry(
 	}
 }
 
-func incrementProgressIfNeeded(progress *progress.ProgressManager, opts ScanOptions) {
-	if progress != nil && opts.File == "" {
-		progress.Increment()
-	}
-}

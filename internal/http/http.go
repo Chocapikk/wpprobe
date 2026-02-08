@@ -36,18 +36,18 @@ import (
 	"github.com/corpix/uarand"
 )
 
-const maxResponseSizeMB = 50
-
-var maxResponseSize = maxResponseSizeMB * 1024 * 1024
+var maxResponseSize = 1024 * 1024 // 1MB
 
 const defaultMaxRedirects = 10
 
 type HTTPClientManager struct {
-	client       *http.Client
-	userAgent    string
-	headers      []string
-	rateLimiter  *RateLimiter
-	maxRedirects int
+	client        *http.Client
+	userAgent     string
+	headers       []string
+	parsedHeaders map[string]string
+	hasCustomUA   bool
+	rateLimiter   *RateLimiter
+	maxRedirects  int
 }
 
 func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps int, maxRedirects int) *HTTPClientManager {
@@ -87,25 +87,39 @@ func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps
 		}
 	}
 
-	return &HTTPClientManager{
+	mgr := &HTTPClientManager{
 		client:       client,
 		userAgent:    uarand.GetRandom(),
 		headers:      headers,
 		rateLimiter:  NewRateLimiter(rps),
 		maxRedirects: maxRedirects,
 	}
+	mgr.parsedHeaders, mgr.hasCustomUA = mgr.parseHeaders()
+	return mgr
 }
 
 // NewHTTPClientFromExternal wraps an external http.Client (e.g., from a connection pool).
 // This allows reusing an existing client instead of creating a new one.
 // The external client is used as-is; headers and rate limiting are still applied.
 func NewHTTPClientFromExternal(externalClient *http.Client, headers []string, rps int) *HTTPClientManager {
-	return &HTTPClientManager{
+	mgr := &HTTPClientManager{
 		client:       externalClient,
-		userAgent:    "", // User-Agent should be set by the external client or headers
+		userAgent:    "",
 		headers:      headers,
 		rateLimiter:  NewRateLimiter(rps),
-		maxRedirects: 0, // External client handles redirects
+		maxRedirects: 0,
+	}
+	mgr.parsedHeaders, mgr.hasCustomUA = mgr.parseHeaders()
+	return mgr
+}
+
+// EnableKeepAlives enables HTTP connection reuse. Use this when making
+// many requests to the same host (e.g. bruteforce scanning).
+func (h *HTTPClientManager) EnableKeepAlives(maxConnsPerHost int) {
+	if t, ok := h.client.Transport.(*http.Transport); ok {
+		t.DisableKeepAlives = false
+		t.MaxIdleConnsPerHost = maxConnsPerHost
+		t.IdleConnTimeout = 30 * time.Second
 	}
 }
 
@@ -129,45 +143,82 @@ func (h *HTTPClientManager) parseHeaders() (map[string]string, bool) {
 	return headers, hasUA
 }
 
+func (h *HTTPClientManager) waitForRate(ctx context.Context) error {
+	if h.rateLimiter == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		h.rateLimiter.Wait()
+		return nil
+	}
+}
+
+func (h *HTTPClientManager) applyHeaders(req *http.Request) {
+	if h.hasCustomUA {
+		req.Header.Set("User-Agent", h.parsedHeaders["User-Agent"])
+	} else if h.userAgent != "" {
+		req.Header.Set("User-Agent", h.userAgent)
+	}
+	for key, value := range h.parsedHeaders {
+		if !strings.EqualFold(key, "User-Agent") {
+			req.Header.Add(key, value)
+		}
+	}
+}
+
+func (h *HTTPClientManager) newRequest(ctx context.Context, method, url string) (*http.Request, error) {
+	if err := h.waitForRate(ctx); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	h.applyHeaders(req)
+	return req, nil
+}
+
+func (h *HTTPClientManager) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	resp, err := h.client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, err
+	}
+	return resp, nil
+}
+
+// HeadWithContext sends a HEAD request and returns the HTTP status code.
+// No body is read. Useful for fast existence checks (e.g. 403 vs 404).
+func (h *HTTPClientManager) HeadWithContext(ctx context.Context, url string) (int, error) {
+	req, err := h.newRequest(ctx, "HEAD", url)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := h.doRequest(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode, nil
+}
+
 func (h *HTTPClientManager) Get(url string) (string, error) {
 	return h.GetWithContext(context.Background(), url)
 }
 
 func (h *HTTPClientManager) GetWithContext(ctx context.Context, url string) (string, error) {
-	if h.rateLimiter != nil {
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		default:
-			h.rateLimiter.Wait()
-		}
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := h.newRequest(ctx, "GET", url)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", err
 	}
-
-	parsedHeaders, hasUA := h.parseHeaders()
-
-	if hasUA {
-		req.Header.Set("User-Agent", parsedHeaders["User-Agent"])
-	} else {
-		req.Header.Set("User-Agent", h.userAgent)
-	}
-
-	for key, value := range parsedHeaders {
-		if !strings.EqualFold(key, "User-Agent") {
-			req.Header.Add(key, value)
-		}
-	}
-
-	resp, err := h.client.Do(req)
+	resp, err := h.doRequest(ctx, req)
 	if err != nil {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		return "", fmt.Errorf("request failed: %w", err)
+		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 

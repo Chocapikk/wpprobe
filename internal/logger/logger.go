@@ -84,7 +84,12 @@ func (l *Logger) Success(msg string) {
 	if !l.Verbose {
 		return
 	}
-	l.Logger.Println(formatTime() + " [" + successStyle.Render("SUCCESS") + "] " + msg)
+	l.Logger.Println(FormatSuccess(msg))
+}
+
+// FormatSuccess returns a formatted success message string without printing it.
+func FormatSuccess(msg string) string {
+	return formatTime() + " [" + successStyle.Render("SUCCESS") + "] " + msg
 }
 
 func (l *Logger) PrintBanner(version string, isLatest bool) {

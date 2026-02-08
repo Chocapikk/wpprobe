@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
+	wphttp "github.com/Chocapikk/wpprobe/internal/http"
 	"github.com/Chocapikk/wpprobe/internal/progress"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 )
@@ -102,29 +103,23 @@ type PluginDisplayData struct {
 	hasVuln     bool
 }
 
-// HTTPConfig contains HTTP-related configuration.
-type HTTPConfig struct {
-	Headers      []string
-	Proxy        string
-	RateLimit    int             // Requests per second (0 = unlimited)
-	MaxRedirects int             // Maximum redirects to follow (0 = disable, -1 = default: 10)
-	Context      context.Context // Context for cancellation
-	Client       *http.Client    // External HTTP client (optional)
+// HTTPConfigFromOpts builds an http.Config from ScanOptions.
+func HTTPConfigFromOpts(opts ScanOptions) wphttp.Config {
+	return wphttp.Config{
+		Headers:        opts.Headers,
+		Proxy:          opts.Proxy,
+		RateLimit:      opts.RateLimit,
+		MaxRedirects:   opts.MaxRedirects,
+		ExternalClient: opts.HTTPClient,
+	}
 }
 
 // ScanContext contains context for scanning operations.
 type ScanContext struct {
 	Target   string
 	Threads  int
-	HTTP     HTTPConfig
+	HTTP     wphttp.Config
 	Progress *progress.ProgressManager
-}
-
-// SyncContext contains synchronization primitives for concurrent operations.
-type SyncContext struct {
-	Mu    *sync.Mutex
-	Wg    *sync.WaitGroup
-	Sem   chan struct{}
 }
 
 // BruteforceRequest contains request parameters for bruteforce operations.
@@ -133,7 +128,7 @@ type BruteforceRequest struct {
 	Plugins  []string
 	Threads  int
 	Progress *progress.ProgressManager
-	HTTP     HTTPConfig
+	HTTP     wphttp.Config
 }
 
 // HybridScanRequest contains request parameters for hybrid scan operations.
@@ -143,17 +138,19 @@ type HybridScanRequest struct {
 	BruteforcePlugins []string
 	Threads          int
 	Progress         *progress.ProgressManager
-	HTTP             HTTPConfig
+	HTTP             wphttp.Config
 }
 
 // BruteforceContext contains context for bruteforce operations.
 type BruteforceContext struct {
 	ScanContext
-	SyncContext
+	Mu       *sync.Mutex
+	Wg       *sync.WaitGroup
+	Sem      chan struct{}
 	Detected *[]string
 	Versions *map[string]string
 	Ctx      context.Context
-	Cancel   context.CancelFunc
+	Client   *wphttp.HTTPClientManager
 }
 
 // VulnerabilityCheckRequest contains request parameters for checking vulnerabilities.
@@ -170,11 +167,13 @@ type VulnerabilityCheckRequest struct {
 // VulnerabilityCheckContext contains context for vulnerability checking.
 type VulnerabilityCheckContext struct {
 	ScanContext
-	SyncContext
+	Mu                  *sync.Mutex
+	Wg                  *sync.WaitGroup
+	Sem                 chan struct{}
 	EntriesMap          *map[string]string
 	EntriesList         *[]file.PluginEntry
 	Vulnerabilities     []wordfence.Vulnerability
-	VulnIndex           map[string][]wordfence.Vulnerability // Indexed by plugin slug for fast lookup
+	VulnIndex           map[string][]*wordfence.Vulnerability // Indexed by plugin slug for fast lookup
 	PreDetectedVersions map[string]string
 	Ctx                 context.Context // Context for cancellation
 }
@@ -223,34 +222,6 @@ type TargetScanContext struct {
 	Vulns    []wordfence.Vulnerability
 	Sem      chan struct{}
 	Wg       *sync.WaitGroup
-}
-
-// BruteforceProgressContext contains context for bruteforce progress management.
-type BruteforceProgressContext struct {
-	Opts           ScanOptions
-	ParentProgress *progress.ProgressManager
-	PluginCount    int
-}
-
-// DetectionResultContext contains context for building detection results.
-type DetectionResultContext struct {
-	Endpoints     []string
-	EndpointsData map[string][]string
-	HTMLSlugs     []string
-}
-
-// HybridResultContext contains context for combining hybrid scan results.
-type HybridResultContext struct {
-	StealthyList []string
-	StealthyRes  PluginDetectionResult
-	Brutefound   []string
-}
-
-// WriteResultsContext contains context for writing results.
-type WriteResultsContext struct {
-	Writer  file.WriterInterface
-	Target  string
-	Entries []file.PluginEntry
 }
 
 // DisplayResultsContext contains context for displaying scan results.

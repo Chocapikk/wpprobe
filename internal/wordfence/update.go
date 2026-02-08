@@ -128,10 +128,7 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 			}
 		}
 
-		authType = vulnerability.DetermineAuthTypeFromCVSS(cvssVector)
-		if authType == "" {
-			authType = vulnerability.DetermineAuthTypeFromTitle(title)
-		}
+		authType = vulnerability.DetermineAuthType(cvssVector, title)
 
 		for _, software := range vulnMap["software"].([]interface{}) {
 			softMap, ok := software.(map[string]interface{})

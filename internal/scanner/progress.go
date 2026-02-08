@@ -45,16 +45,16 @@ func finishProgressIfNeeded(progress *progress.ProgressManager) {
 	}
 }
 
-func setupBruteforceProgress(ctx BruteforceProgressContext) *progress.ProgressManager {
-	if ctx.ParentProgress == nil {
-		return progress.NewProgressBar(ctx.PluginCount, "🔎 Bruteforcing plugins...")
+func setupBruteforceProgress(opts ScanOptions, parentProgress *progress.ProgressManager, pluginCount int) *progress.ProgressManager {
+	if parentProgress == nil {
+		return progress.NewProgressBar(pluginCount, "🔎 Bruteforcing plugins...")
 	}
 
-	if ctx.Opts.File == "" {
-		ctx.ParentProgress.SetTotal(ctx.PluginCount)
-		ctx.ParentProgress.SetMessage("🔎 Bruteforcing plugins...")
+	if opts.File == "" {
+		parentProgress.SetTotal(pluginCount)
+		parentProgress.SetMessage("🔎 Bruteforcing plugins...")
 	}
-	return ctx.ParentProgress
+	return parentProgress
 }
 
 func finishBruteforceProgress(progress *progress.ProgressManager, opts ScanOptions) {

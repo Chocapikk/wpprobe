@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	wphttp "github.com/Chocapikk/wpprobe/internal/http"
 )
 
 func sortedSlice(ss []string) []string {
@@ -105,7 +107,7 @@ func TestDiscoverPluginsFromHTML(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	slugs, err := discoverPluginsFromHTML(context.TODO(), ts.URL, nil, "", 0, -1, nil)
+	slugs, err := discoverPluginsFromHTML(context.TODO(), ts.URL, wphttp.Config{MaxRedirects: -1})
 	if err != nil {
 		t.Fatalf("discoverPluginsFromHTML returned error: %v", err)
 	}

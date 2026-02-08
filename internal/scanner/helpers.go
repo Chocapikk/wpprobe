@@ -19,13 +19,30 @@
 
 package scanner
 
+import (
+	"fmt"
+
+	"github.com/Chocapikk/wpprobe/internal/logger"
+	"github.com/Chocapikk/wpprobe/internal/progress"
+)
+
 // releaseSemaphore releases a semaphore slot.
 func releaseSemaphore(sem chan struct{}) {
 	<-sem
 }
 
-// recoverFromPanic recovers from panics silently.
-func recoverFromPanic() {
-	_ = recover()
+// recoverPanic recovers from panics, logging the label if provided.
+func recoverPanic(label string) {
+	if r := recover(); r != nil {
+		if label != "" {
+			logger.DefaultLogger.Error(fmt.Sprintf("Panic while scanning %s: %v", label, r))
+		}
+	}
 }
 
+// incrementProgress increments the progress bar if non-nil.
+func incrementProgress(p *progress.ProgressManager) {
+	if p != nil {
+		p.Increment()
+	}
+}

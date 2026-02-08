@@ -63,7 +63,8 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 
 	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "🔎 Discovering plugins from HTML...")
 
-	htmlSlugs, err := discoverPluginsFromHTML(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects, ctx.Opts.HTTPClient)
+	httpCfg := HTTPConfigFromOpts(ctx.Opts)
+	htmlSlugs, err := discoverPluginsFromHTML(ctx.Ctx, ctx.Target, httpCfg)
 	if err != nil {
 		// If context was cancelled, return early
 		if ctx.Ctx != nil && ctx.Ctx.Err() != nil {
@@ -88,14 +89,9 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 		return nil, PluginDetectionResult{}
 	}
 
-	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, ctx.Opts.Headers, ctx.Opts.Proxy, ctx.Opts.RateLimit, ctx.Opts.MaxRedirects, ctx.Opts.HTTPClient)
+	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, httpCfg)
 
-	resultCtx := DetectionResultContext{
-		Endpoints:     endpoints,
-		EndpointsData: endpointsData,
-		HTMLSlugs:     htmlSlugs,
-	}
-	result := buildDetectionResult(resultCtx)
+	result := buildDetectionResult(endpoints, endpointsData, htmlSlugs)
 
 	if len(result.Detected) == 0 {
 		return nil, result
@@ -110,12 +106,7 @@ func performBruteforceScan(ctx ScanExecutionContext) ([]string, PluginDetectionR
 		return nil, PluginDetectionResult{}, nil
 	}
 
-	progressCtx := BruteforceProgressContext{
-		Opts:           ctx.Opts,
-		ParentProgress: ctx.Progress,
-		PluginCount:    len(plugins),
-	}
-	progress := setupBruteforceProgress(progressCtx)
+	progress := setupBruteforceProgress(ctx.Opts, ctx.Progress, len(plugins))
 	defer finishBruteforceProgress(progress, ctx.Opts)
 
 	bruteReq := BruteforceRequest{
@@ -123,7 +114,7 @@ func performBruteforceScan(ctx ScanExecutionContext) ([]string, PluginDetectionR
 		Plugins:  plugins,
 		Threads:  ctx.Opts.Threads,
 		Progress: progress,
-		HTTP:     HTTPConfig{Headers: ctx.Opts.Headers, Proxy: ctx.Opts.Proxy, RateLimit: ctx.Opts.RateLimit, MaxRedirects: ctx.Opts.MaxRedirects},
+		HTTP:     HTTPConfigFromOpts(ctx.Opts),
 	}
 	detected, versions := BruteforcePlugins(bruteReq)
 
@@ -149,12 +140,7 @@ func performHybridScan(ctx ScanExecutionContext) ([]string, PluginDetectionResul
 
 	brutefound, versions := performBruteforceOnRemaining(ctx, remaining)
 
-	resultCtx := HybridResultContext{
-		StealthyList: stealthyList,
-		StealthyRes:  stealthyRes,
-		Brutefound:   brutefound,
-	}
-	detected, result := combineHybridResults(resultCtx)
+	detected, result := combineHybridResults(stealthyList, stealthyRes, brutefound)
 	return detected, result, versions
 }
 
@@ -170,7 +156,7 @@ func performBruteforceOnRemaining(ctx ScanExecutionContext, remaining []string) 
 		Plugins:  remaining,
 		Threads:  ctx.Opts.Threads,
 		Progress: bruteBar,
-		HTTP:     HTTPConfig{Headers: ctx.Opts.Headers, Proxy: ctx.Opts.Proxy, RateLimit: ctx.Opts.RateLimit, MaxRedirects: ctx.Opts.MaxRedirects},
+		HTTP:     HTTPConfigFromOpts(ctx.Opts),
 	}
 	detected, versions := BruteforcePlugins(bruteReq)
 	return detected, versions

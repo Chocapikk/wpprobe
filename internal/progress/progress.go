@@ -67,7 +67,6 @@ func NewProgressBar(total int, description string) *ProgressManager {
 	go func() {
 		<-signalChan
 		pm.Finish()
-		os.Exit(1)
 	}()
 
 	return pm
@@ -99,10 +98,7 @@ func (p *ProgressManager) RenderBlank() {
 func (p *ProgressManager) ClearLine() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
-	defer func() { _, _ = fmt.Fprint(ansi.NewAnsiStderr(), "\r\033[2K") }()
-	time.Sleep(10 * time.Millisecond)
-	defer func() { _ = os.Stdout.Sync() }()
+	_, _ = fmt.Fprint(ansi.NewAnsiStderr(), "\r\033[2K")
 }
 
 // Write adds the length of data to the bar.

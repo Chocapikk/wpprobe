@@ -81,7 +81,7 @@ func executeScans(config ScanExecutionConfig) {
 func scanTarget(ctx TargetScanContext) {
 	defer ctx.Wg.Done()
 	defer releaseSemaphore(ctx.Sem)
-	defer recoverFromPanic()
+	defer recoverPanic(ctx.Target)
 
 	localOpts := ctx.Opts
 	localOpts.Threads = ctx.PerSite
@@ -151,12 +151,7 @@ func ScanSite(ctx ScanSiteContext) {
 
 	clearProgressLine(ctx.Progress, isFileScan(ctx.Opts))
 
-	writeCtx := WriteResultsContext{
-		Writer:  ctx.Writer,
-		Target:  ctx.Target,
-		Entries: entriesList,
-	}
-	writeResults(writeCtx)
+	writeResults(ctx.Writer, ctx.Target, entriesList)
 
 	displayCtx := DisplayResultsContext{
 		Target:    ctx.Target,

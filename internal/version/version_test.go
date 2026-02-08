@@ -112,7 +112,7 @@ func TestGetPluginVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetPluginVersion(tt.target, tt.plugin, nil, "", 0, -1)
+			got := GetPluginVersion(tt.target, tt.plugin, http.Config{MaxRedirects: -1})
 			if got != tt.expected {
 				t.Errorf("GetPluginVersion() = %v, want %v", got, tt.expected)
 			}

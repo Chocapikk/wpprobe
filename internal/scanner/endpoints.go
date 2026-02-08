@@ -22,7 +22,7 @@ package scanner
 import (
 	"context"
 	"encoding/json"
-	stdhttp "net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,7 +36,7 @@ func fetchEndpointsFromPath(ctx context.Context, target, path string, httpClient
 	}
 
 	var jsonData map[string]interface{}
-	if err := json.Unmarshal([]byte(response), &jsonData); err != nil {
+	if err := json.NewDecoder(strings.NewReader(response)).Decode(&jsonData); err != nil {
 		return []string{}
 	}
 
@@ -53,24 +53,18 @@ func fetchEndpointsFromPath(ctx context.Context, target, path string, httpClient
 	return endpoints
 }
 
-func FetchEndpoints(ctx context.Context, target string, headers []string, proxyURL string, rps int, maxRedirects int, externalClient *stdhttp.Client) []string {
+func FetchEndpoints(ctx context.Context, target string, cfg http.Config) []string {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	// Check context before starting
 	select {
 	case <-ctx.Done():
 		return []string{}
 	default:
 	}
 
-	var httpClient *http.HTTPClientManager
-	if externalClient != nil {
-		httpClient = http.NewHTTPClientFromExternal(externalClient, headers, rps)
-	} else {
-		httpClient = http.NewHTTPClient(5*time.Second, headers, proxyURL, rps, maxRedirects)
-	}
+	httpClient := cfg.NewClient(5 * time.Second)
 
 	endpointsChan := make(chan []string, 2)
 	var wg sync.WaitGroup
