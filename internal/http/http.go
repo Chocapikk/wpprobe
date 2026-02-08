@@ -207,6 +207,26 @@ func (h *HTTPClientManager) HeadWithContext(ctx context.Context, url string) (in
 	return resp.StatusCode, nil
 }
 
+// GetStatusAndBody sends a GET request and returns both the status code and body.
+// Unlike GetWithContext, it does not treat non-2xx responses as errors.
+func (h *HTTPClientManager) GetStatusAndBody(ctx context.Context, url string) (int, string, error) {
+	req, err := h.newRequest(ctx, "GET", url)
+	if err != nil {
+		return 0, "", err
+	}
+	resp, err := h.doRequest(ctx, req)
+	if err != nil {
+		return 0, "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	limited := io.LimitReader(resp.Body, int64(maxResponseSize))
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return resp.StatusCode, "", err
+	}
+	return resp.StatusCode, string(data), nil
+}
+
 func (h *HTTPClientManager) Get(url string) (string, error) {
 	return h.GetWithContext(context.Background(), url)
 }
