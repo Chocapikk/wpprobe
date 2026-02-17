@@ -15,7 +15,7 @@
 
 # WPProbe
 
-A fast WordPress plugin scanner that detects installed plugins via REST API enumeration and maps them to known vulnerabilities. Over 3000 plugins detectable without brute-force, thousands more with it.
+A fast WordPress plugin scanner that detects installed plugins via REST API enumeration and maps them to known vulnerabilities. Over 5000 plugins detectable without brute-force, thousands more with it.
 
 ## Quick Start
 
@@ -29,7 +29,7 @@ wpprobe scan -u https://example.com
 
 | Mode | Method | Stealth | Coverage |
 |------|--------|---------|----------|
-| `stealthy` (default) | REST API endpoint matching | High | 3000+ plugins |
+| `stealthy` (default) | REST API endpoint matching | High | 5000+ plugins |
 | `bruteforce` | Direct directory checks | Low | 10k+ plugins |
 | `hybrid` | Stealthy first, then brute-force | Medium | Maximum |
 
