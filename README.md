@@ -12,6 +12,7 @@
 
 [![Go CI](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml)
 [![Latest Release](https://img.shields.io/github/v/release/Chocapikk/wpprobe)](https://github.com/Chocapikk/wpprobe/releases/latest)
+[![Kali Linux](https://img.shields.io/badge/Kali%20Linux-included-557C94?logo=kalilinux)](https://pkg.kali.org/pkg/wpprobe)
 
 # WPProbe
 
@@ -42,6 +43,9 @@ wpprobe scan -u https://example.com --mode hybrid
 ## Installation
 
 ```sh
+# Kali Linux (included in kali-rolling)
+sudo apt install wpprobe
+
 # Go (requires 1.22+)
 go install github.com/Chocapikk/wpprobe@latest
 
