@@ -22,6 +22,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/Chocapikk/wpprobe/internal/database"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/version"
 	"github.com/spf13/cobra"
@@ -37,6 +38,13 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	_, isLatest := version.CheckLatestVersion(version.Version)
 	logger.DefaultLogger.PrintBanner(version.Version, isLatest)
+
+	dbExists, dbOutdated := database.CheckDatabaseStatus()
+	if !dbExists {
+		logger.DefaultLogger.Warning("Vulnerability database not found. Run: wpprobe update-db")
+	} else if dbOutdated {
+		logger.DefaultLogger.Warning("Vulnerability database is outdated. Run: wpprobe update-db")
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		logger.DefaultLogger.Error(err.Error())
