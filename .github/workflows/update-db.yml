@@ -27,7 +27,7 @@ jobs:
         run: ./wpprobe update-db --api-key "${{ secrets.WORDFENCE_API_KEY }}"
 
       - name: Create db release if missing
-        run: gh release create db --title "Vulnerability Database" --notes "Auto-updated Wordfence vulnerability database." 2>/dev/null || true
+        run: gh release create db --prerelease --title "Vulnerability Database" --notes "Auto-updated Wordfence vulnerability database." 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
