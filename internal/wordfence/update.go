@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -30,15 +31,24 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 )
 
-const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v2/vulnerabilities/production"
+const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v3/vulnerabilities/production"
 
 // Vulnerability is an alias for the common vulnerability type.
 type Vulnerability = vulnerability.Vulnerability
 
+func getAPIKey() string {
+	return os.Getenv("WORDFENCE_API_KEY")
+}
+
 func UpdateWordfence() error {
+	apiKey := getAPIKey()
+	if apiKey == "" {
+		return fmt.Errorf("WORDFENCE_API_KEY not set. Get a free API key at https://www.wordfence.com/account/integrations")
+	}
+
 	logger.DefaultLogger.Info("Fetching Wordfence data...")
 
-	data, err := fetchWordfenceData()
+	data, err := fetchWordfenceData(apiKey)
 	if err != nil {
 		handleFetchError(err)
 		return err
@@ -57,9 +67,15 @@ func UpdateWordfence() error {
 	return nil
 }
 
-func fetchWordfenceData() (map[string]interface{}, error) {
+func fetchWordfenceData(apiKey string) (map[string]interface{}, error) {
+	req, err := nethttp.NewRequest("GET", wordfenceAPI, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
 	client := &nethttp.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(wordfenceAPI)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

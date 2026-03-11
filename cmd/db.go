@@ -20,6 +20,8 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 	"github.com/Chocapikk/wpprobe/internal/wpscan"
 	"github.com/spf13/cobra"
@@ -31,6 +33,10 @@ var (
 )
 
 func runUpdateDb(cmd *cobra.Command, args []string) error {
+	if apiKey, _ := cmd.Flags().GetString("api-key"); apiKey != "" {
+		os.Setenv("WORDFENCE_API_KEY", apiKey)
+	}
+
 	if err := updateWordfenceFunc(); err != nil {
 		cmd.PrintErrf("Failed to update Wordfence database: %v\n", err)
 		return err
@@ -47,6 +53,10 @@ func runUpdateDb(cmd *cobra.Command, args []string) error {
 var updateDbCmd = &cobra.Command{
 	Use:   "update-db",
 	Short: "Update vulnerability databases",
-	Long:  "Fetches the latest Wordfence and WPScan vulnerability databases and updates the local JSON files.",
+	Long:  "Fetches the latest Wordfence and WPScan vulnerability databases and updates the local JSON files.\nWordfence API requires a free API key (set via --api-key flag or WORDFENCE_API_KEY env var).\nGet your key at https://www.wordfence.com/account/integrations.",
 	RunE:  runUpdateDb,
+}
+
+func init() {
+	updateDbCmd.Flags().String("api-key", "", "Wordfence API key (or set WORDFENCE_API_KEY env var)")
 }
