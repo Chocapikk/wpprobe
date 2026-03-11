@@ -13,6 +13,8 @@
 [![Go CI](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml)
 [![Latest Release](https://img.shields.io/github/v/release/Chocapikk/wpprobe)](https://github.com/Chocapikk/wpprobe/releases/latest)
 [![Kali Linux](https://img.shields.io/badge/Kali%20Linux-included-557C94?logo=kalilinux)](https://pkg.kali.org/pkg/wpprobe)
+[![Exegol](https://img.shields.io/badge/Exegol-included-ED1C24)](https://github.com/ThePorgs/Exegol)
+[![Secator](https://img.shields.io/badge/Secator-supported-4B8BBE)](https://github.com/freelabz/secator)
 
 # WPProbe
 
