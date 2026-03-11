@@ -3,7 +3,7 @@ name: Build & Release WPProbe
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 
 permissions:
   contents: write
