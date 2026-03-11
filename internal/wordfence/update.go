@@ -22,16 +22,21 @@ package wordfence
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	nethttp "net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 )
 
-const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v3/vulnerabilities/production"
+const (
+	wordfenceAPI = "https://www.wordfence.com/api/intelligence/v3/vulnerabilities/production"
+	githubDBURL  = "https://github.com/Chocapikk/wpprobe/releases/download/db/wordfence_vulnerabilities.json"
+)
 
 // Vulnerability is an alias for the common vulnerability type.
 type Vulnerability = vulnerability.Vulnerability
@@ -42,10 +47,15 @@ func getAPIKey() string {
 
 func UpdateWordfence() error {
 	apiKey := getAPIKey()
-	if apiKey == "" {
-		return fmt.Errorf("WORDFENCE_API_KEY not set. Get a free API key at https://www.wordfence.com/account/integrations")
+	if apiKey != "" {
+		return updateFromAPI(apiKey)
 	}
 
+	logger.DefaultLogger.Info("No API key set, fetching from GitHub release...")
+	return updateFromGitHub()
+}
+
+func updateFromAPI(apiKey string) error {
 	logger.DefaultLogger.Info("Fetching Wordfence data...")
 
 	data, err := fetchWordfenceData(apiKey)
@@ -64,6 +74,37 @@ func UpdateWordfence() error {
 	}
 
 	logger.DefaultLogger.Success("Wordfence data updated successfully!")
+	return nil
+}
+
+func updateFromGitHub() error {
+	client := &nethttp.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(githubDBURL)
+	if err != nil {
+		return fmt.Errorf("failed to download database from GitHub: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != nethttp.StatusOK {
+		return fmt.Errorf("GitHub download failed: %d %s", resp.StatusCode, nethttp.StatusText(resp.StatusCode))
+	}
+
+	outputPath, err := file.GetStoragePath("wordfence_vulnerabilities.json")
+	if err != nil {
+		return err
+	}
+
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer func() { _ = out.Close() }()
+
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return fmt.Errorf("failed to write database: %w", err)
+	}
+
+	logger.DefaultLogger.Success("Wordfence data downloaded from GitHub release.")
 	return nil
 }
 
