@@ -18,11 +18,12 @@
 
 A fast WordPress plugin scanner that detects installed plugins via REST API enumeration and maps them to known vulnerabilities. Over 5000 plugins detectable without brute-force, thousands more with it.
 
-## Important: Wordfence API Key Required
+## Important: Wordfence API Change
 
-Since March 9, 2026, Wordfence deprecated their v2 API. All WPProbe versions prior to v0.10.16 have broken `update-db` functionality. You need to update WPProbe and provide a free Wordfence API key.
+Since March 9, 2026, Wordfence deprecated their v2 API. All WPProbe versions prior to v0.10.16 have broken `update-db` functionality. You need to update WPProbe.
 
-The setup is a bit more annoying now but the API key is free:
+By default, `wpprobe update-db` fetches a pre-built database from this repo (updated every 2h via CI), so no API key is needed. If you want to fetch directly from Wordfence yourself, you can optionally set up a free API key:
+
 1. Create an account at [wordfence.com](https://www.wordfence.com)
 2. Go to [Account > Integrations](https://www.wordfence.com/account/integrations) and generate an API key
 3. Set it via environment variable or `--api-key` flag
@@ -31,7 +32,6 @@ The setup is a bit more annoying now but the API key is free:
 
 ```sh
 go install github.com/Chocapikk/wpprobe@latest
-export WORDFENCE_API_KEY=your_key_here
 wpprobe update-db
 wpprobe scan -u https://example.com
 ```
