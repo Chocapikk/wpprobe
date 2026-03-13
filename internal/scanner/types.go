@@ -104,6 +104,7 @@ type PluginDisplayData struct {
 }
 
 // HTTPConfigFromOpts builds an http.Config from ScanOptions.
+// The shared rate limiter is created once and reused by all clients.
 func HTTPConfigFromOpts(opts ScanOptions) wphttp.Config {
 	return wphttp.Config{
 		Headers:        opts.Headers,
@@ -111,6 +112,7 @@ func HTTPConfigFromOpts(opts ScanOptions) wphttp.Config {
 		RateLimit:      opts.RateLimit,
 		MaxRedirects:   opts.MaxRedirects,
 		ExternalClient: opts.HTTPClient,
+		SharedLimiter:  wphttp.NewRateLimiter(opts.RateLimit),
 	}
 }
 

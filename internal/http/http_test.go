@@ -315,3 +315,49 @@ func TestEnableKeepAlives(t *testing.T) {
 		t.Errorf("MaxIdleConnsPerHost = %d, want 50", transport.MaxIdleConnsPerHost)
 	}
 }
+
+func TestConfig_SharedLimiter(t *testing.T) {
+	limiter := NewRateLimiter(50)
+	cfg := Config{
+		RateLimit:     50,
+		MaxRedirects:  -1,
+		SharedLimiter: limiter,
+	}
+
+	client1 := cfg.NewClient(5 * time.Second)
+	client2 := cfg.NewClient(5 * time.Second)
+	client3 := cfg.NewClient(10 * time.Second)
+
+	if client1.rateLimiter != limiter {
+		t.Error("client1 should use the shared limiter")
+	}
+	if client2.rateLimiter != limiter {
+		t.Error("client2 should use the shared limiter")
+	}
+	if client3.rateLimiter != limiter {
+		t.Error("client3 should use the shared limiter")
+	}
+	if client1.rateLimiter != client2.rateLimiter {
+		t.Error("All clients from same Config should share the same rate limiter")
+	}
+}
+
+func TestConfig_NoSharedLimiter_CreatesPerClient(t *testing.T) {
+	cfg := Config{
+		RateLimit:    50,
+		MaxRedirects: -1,
+	}
+
+	client1 := cfg.NewClient(5 * time.Second)
+	client2 := cfg.NewClient(5 * time.Second)
+
+	if client1.rateLimiter == nil {
+		t.Error("client1 should have a rate limiter")
+	}
+	if client2.rateLimiter == nil {
+		t.Error("client2 should have a rate limiter")
+	}
+	if client1.rateLimiter == client2.rateLimiter {
+		t.Error("Without SharedLimiter, each client should get its own limiter")
+	}
+}

@@ -116,6 +116,70 @@ func NewHTTPClientFromExternal(externalClient *http.Client, headers []string, rp
 	return mgr
 }
 
+// newHTTPClientWithLimiter creates an HTTPClientManager with a shared rate limiter.
+func newHTTPClientWithLimiter(timeout time.Duration, headers []string, proxyURL string, limiter *RateLimiter, maxRedirects int) *HTTPClientManager {
+	if maxRedirects < 0 {
+		maxRedirects = defaultMaxRedirects
+	}
+	transport := &http.Transport{
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		MaxConnsPerHost:     20,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     30 * time.Second,
+	}
+
+	if proxyURL != "" {
+		proxy, err := url.Parse(proxyURL)
+		if err != nil {
+			logger.DefaultLogger.Warning(fmt.Sprintf("Invalid proxy URL %q: %v, ignoring proxy", proxyURL, err))
+		} else {
+			transport.Proxy = http.ProxyURL(proxy)
+		}
+	}
+
+	client := &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}
+
+	if maxRedirects == 0 {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	} else {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxRedirects {
+				return errors.New("stopped after max redirects")
+			}
+			return nil
+		}
+	}
+
+	mgr := &HTTPClientManager{
+		client:       client,
+		userAgent:    uarand.GetRandom(),
+		headers:      headers,
+		rateLimiter:  limiter,
+		maxRedirects: maxRedirects,
+	}
+	mgr.parsedHeaders, mgr.hasCustomUA = mgr.parseHeaders()
+	return mgr
+}
+
+// newHTTPClientFromExternalWithLimiter wraps an external client with a shared rate limiter.
+func newHTTPClientFromExternalWithLimiter(externalClient *http.Client, headers []string, limiter *RateLimiter) *HTTPClientManager {
+	mgr := &HTTPClientManager{
+		client:       externalClient,
+		userAgent:    "",
+		headers:      headers,
+		rateLimiter:  limiter,
+		maxRedirects: 0,
+	}
+	mgr.parsedHeaders, mgr.hasCustomUA = mgr.parseHeaders()
+	return mgr
+}
+
 // EnableKeepAlives enables HTTP connection reuse. Use this when making
 // many requests to the same host (e.g. bruteforce scanning).
 func (h *HTTPClientManager) EnableKeepAlives(maxConnsPerHost int) {

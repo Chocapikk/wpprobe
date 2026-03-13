@@ -12,13 +12,19 @@ type Config struct {
 	RateLimit      int              // Requests per second (0 = unlimited)
 	MaxRedirects   int              // Maximum redirects to follow (0 = disable, -1 = default: 10)
 	ExternalClient *stdhttp.Client  // External HTTP client (optional, for connection pooling)
+	SharedLimiter  *RateLimiter     // Shared rate limiter across all clients (set once, reused)
 }
 
 // NewClient creates an HTTPClientManager from this config.
-// If ExternalClient is set, it wraps that client. Otherwise creates a new one.
+// If SharedLimiter is set, all clients share that limiter.
+// Otherwise a new per-client limiter is created from RateLimit.
 func (c Config) NewClient(timeout time.Duration) *HTTPClientManager {
-	if c.ExternalClient != nil {
-		return NewHTTPClientFromExternal(c.ExternalClient, c.Headers, c.RateLimit)
+	limiter := c.SharedLimiter
+	if limiter == nil && c.RateLimit > 0 {
+		limiter = NewRateLimiter(c.RateLimit)
 	}
-	return NewHTTPClient(timeout, c.Headers, c.Proxy, c.RateLimit, c.MaxRedirects)
+	if c.ExternalClient != nil {
+		return newHTTPClientFromExternalWithLimiter(c.ExternalClient, c.Headers, limiter)
+	}
+	return newHTTPClientWithLimiter(timeout, c.Headers, c.Proxy, limiter, c.MaxRedirects)
 }
