@@ -163,7 +163,7 @@ func TestRedirect_IntermediateBodiesClosed(t *testing.T) {
 	mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
 		openBodies.Add(1)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("done"))
+		_, _ = w.Write([]byte("done"))
 	})
 
 	server := httptest.NewServer(mux)
@@ -264,7 +264,7 @@ func TestRedirect_ContextCancellation(t *testing.T) {
 func TestGetStatusAndBody_ReturnsNon2xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("forbidden"))
+		_, _ = w.Write([]byte("forbidden"))
 	}))
 	defer server.Close()
 
