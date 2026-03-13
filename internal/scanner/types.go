@@ -43,10 +43,11 @@ type ScanOptions struct {
 	PluginList     string
 	Headers        []string
 	Proxy          string
-	RateLimit      int             // Requests per second (0 = unlimited)
-	MaxRedirects   int             // Maximum redirects to follow (0 = disable, -1 = default: 10)
-	Context        context.Context // Context for cancellation
-	HTTPClient     *http.Client    // External HTTP client (optional, for connection pooling)
+	RateLimit      int                  // Requests per second (0 = unlimited)
+	MaxRedirects   int                  // Maximum redirects to follow (0 = disable, -1 = default: 10)
+	Context        context.Context      // Context for cancellation
+	HTTPClient     *http.Client         // External HTTP client (optional, for connection pooling)
+	SharedLimiter  *wphttp.RateLimiter  // Global rate limiter shared across all targets
 }
 
 // PluginData contains information about a detected plugin.
@@ -104,15 +105,19 @@ type PluginDisplayData struct {
 }
 
 // HTTPConfigFromOpts builds an http.Config from ScanOptions.
-// The shared rate limiter is created once and reused by all clients.
+// Uses the global shared rate limiter from opts, or creates one if not set.
 func HTTPConfigFromOpts(opts ScanOptions) wphttp.Config {
+	limiter := opts.SharedLimiter
+	if limiter == nil && opts.RateLimit > 0 {
+		limiter = wphttp.NewRateLimiter(opts.RateLimit)
+	}
 	return wphttp.Config{
 		Headers:        opts.Headers,
 		Proxy:          opts.Proxy,
 		RateLimit:      opts.RateLimit,
 		MaxRedirects:   opts.MaxRedirects,
 		ExternalClient: opts.HTTPClient,
-		SharedLimiter:  wphttp.NewRateLimiter(opts.RateLimit),
+		SharedLimiter:  limiter,
 	}
 }
 

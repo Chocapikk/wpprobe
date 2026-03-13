@@ -43,7 +43,7 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 	}
 
 	// Index vulnerabilities by slug for O(1) lookup instead of O(n) linear search
-	vulnIndex := buildVulnerabilityIndex(req.Vulns)
+	vulnIndex := getOrBuildVulnerabilityIndex(req.Vulns)
 
 	checkCtx := VulnerabilityCheckContext{
 		ScanContext: ScanContext{
@@ -82,6 +82,28 @@ pluginLoop:
 
 	wg.Wait()
 	return entriesMap, entriesList
+}
+
+var (
+	cachedVulnIndex map[string][]*wordfence.Vulnerability
+	cachedVulnSlice []wordfence.Vulnerability
+	cachedVulnMu    sync.Mutex
+)
+
+// getOrBuildVulnerabilityIndex returns a cached index if the vulns slice hasn't changed,
+// otherwise builds a new one. Since vulns come from a global cache, the pointer check works.
+func getOrBuildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]*wordfence.Vulnerability {
+	cachedVulnMu.Lock()
+	defer cachedVulnMu.Unlock()
+
+	// If same underlying array as cached, return cached index
+	if len(vulns) > 0 && len(cachedVulnSlice) > 0 && &vulns[0] == &cachedVulnSlice[0] {
+		return cachedVulnIndex
+	}
+
+	cachedVulnIndex = buildVulnerabilityIndex(vulns)
+	cachedVulnSlice = vulns
+	return cachedVulnIndex
 }
 
 // buildVulnerabilityIndex creates a map of vulnerability pointers indexed by plugin slug for fast lookup.
@@ -150,7 +172,7 @@ func findMatchingVulnerabilities(
 		return nil
 	}
 
-	var matched []*wordfence.Vulnerability
+	matched := make([]*wordfence.Vulnerability, 0, len(pluginVulns))
 	for _, v := range pluginVulns {
 		if versionpkg.IsVersionVulnerable(version, v.FromVersion, v.ToVersion) {
 			matched = append(matched, v)
@@ -194,7 +216,6 @@ func createEmptyPluginEntry(plugin, version string) file.PluginEntry {
 	return file.PluginEntry{
 		Plugin:   plugin,
 		Version:  version,
-		CVEs:     []string{},
 		Severity: "none",
 		AuthType: "n/a",
 	}

@@ -33,6 +33,7 @@ func TestAPI_Scan(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("Result is nil")
+		return
 	}
 
 	if result.Target != cfg.Target {
@@ -98,6 +99,7 @@ func TestAPI_ScanWithContext(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("Result is nil")
+		return
 	}
 
 	t.Logf("Scan completed with context: %d plugins found", len(result.Plugins))
@@ -128,6 +130,7 @@ func TestAPI_ScanWithProgress(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("Result is nil")
+		return
 	}
 
 	t.Logf("Progress callback called %d times", progressCalls)

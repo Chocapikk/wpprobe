@@ -81,10 +81,6 @@ func DetectPlugins(
 				detection.Plugins[pl].Ambiguous = true
 				detection.Plugins[pl].Matches = group
 			}
-		} else {
-			for _, pl := range group {
-				detection.Plugins[pl].Matches = []string{}
-			}
 		}
 	}
 

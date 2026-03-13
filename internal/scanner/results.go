@@ -20,23 +20,33 @@
 package scanner
 
 import (
+	"sync"
+
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 )
 
-func loadEndpointsData() (map[string][]string, error) {
-	data, err := file.GetEmbeddedFile("files/scanned_plugins.json")
-	if err != nil {
-		logger.DefaultLogger.Error("Failed to load scanned_plugins.json: " + err.Error())
-		return nil, err
-	}
+var (
+	cachedEndpointsData     map[string][]string
+	cachedEndpointsDataOnce sync.Once
+	cachedEndpointsDataErr  error
+)
 
-	endpointsData, err := LoadPluginEndpointsFromData(data)
-	if err != nil {
-		logger.DefaultLogger.Error("Failed to parse scanned_plugins.json: " + err.Error())
-		return nil, err
-	}
-	return endpointsData, nil
+func loadEndpointsData() (map[string][]string, error) {
+	cachedEndpointsDataOnce.Do(func() {
+		data, err := file.GetEmbeddedFile("files/scanned_plugins.json")
+		if err != nil {
+			logger.DefaultLogger.Error("Failed to load scanned_plugins.json: " + err.Error())
+			cachedEndpointsDataErr = err
+			return
+		}
+
+		cachedEndpointsData, cachedEndpointsDataErr = LoadPluginEndpointsFromData(data)
+		if cachedEndpointsDataErr != nil {
+			logger.DefaultLogger.Error("Failed to parse scanned_plugins.json: " + cachedEndpointsDataErr.Error())
+		}
+	})
+	return cachedEndpointsData, cachedEndpointsDataErr
 }
 
 func buildDetectionResult(endpoints []string, endpointsData map[string][]string, htmlSlugs []string) PluginDetectionResult {

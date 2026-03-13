@@ -25,6 +25,7 @@ import (
 	nethttp "net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Chocapikk/wpprobe/internal/http"
@@ -121,14 +122,44 @@ func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager,
 	return "unknown"
 }
 
+// semverCache avoids re-parsing the same version strings thousands of times
+// during vulnerability matching. The vuln database has ~50K entries but many
+// share the same from/to version strings.
+var semverCache sync.Map
+
+type semverCacheEntry struct {
+	version *semver.Version
+	ok      bool
+}
+
+func parseSemverCached(s string) (*semver.Version, bool) {
+	if entry, ok := semverCache.Load(s); ok {
+		e := entry.(semverCacheEntry)
+		return e.version, e.ok
+	}
+	parsed, err := semver.NewVersion(s)
+	if err != nil {
+		semverCache.Store(s, semverCacheEntry{nil, false})
+		return nil, false
+	}
+	semverCache.Store(s, semverCacheEntry{parsed, true})
+	return parsed, true
+}
+
 func IsVersionVulnerable(version, fromVersion, toVersion string) bool {
 	if version == "" || fromVersion == "" || toVersion == "" {
 		return false
 	}
-	v, err1 := semver.NewVersion(version)
-	f, err2 := semver.NewVersion(fromVersion)
-	t, err3 := semver.NewVersion(toVersion)
-	if err1 != nil || err2 != nil || err3 != nil {
+	v, ok := parseSemverCached(version)
+	if !ok {
+		return false
+	}
+	f, ok := parseSemverCached(fromVersion)
+	if !ok {
+		return false
+	}
+	t, ok := parseSemverCached(toVersion)
+	if !ok {
 		return false
 	}
 	return v.Compare(f) >= 0 && v.Compare(t) <= 0

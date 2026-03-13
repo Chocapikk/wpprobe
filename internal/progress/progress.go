@@ -91,7 +91,7 @@ func (p *ProgressManager) Finish() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	_ = p.bar.Finish()
-	fmt.Fprintln(ansi.NewAnsiStderr())
+	_, _ = fmt.Fprintln(ansi.NewAnsiStderr())
 	if p.done != nil {
 		p.doneOnce.Do(func() { close(p.done) })
 	}

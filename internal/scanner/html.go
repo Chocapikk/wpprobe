@@ -99,8 +99,8 @@ func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
 
 		tok := z.Token()
 		for _, attr := range tok.Attr {
-			val := strings.TrimSpace(attr.Val)
-			if val == "" {
+			val := attr.Val
+			if !strings.Contains(val, "wp-content") {
 				continue
 			}
 			parts := strings.Split(val, "/")

@@ -24,25 +24,37 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
 )
 
+var (
+	cachedDefaultPlugins     []string
+	cachedDefaultPluginsOnce sync.Once
+	cachedDefaultPluginsErr  error
+)
+
 // LoadPluginsFromFile loads a list of plugins from an embedded file or a user-specified file.
+// The default embedded plugin list is cached globally since it never changes.
 func LoadPluginsFromFile(filename string) ([]string, error) {
 	if filename == "" {
-		data, err := file.GetEmbeddedFile("files/wordpress_plugins.txt")
-		if err != nil {
-			return nil, fmt.Errorf("failed to load default plugin list: %w", err)
-		}
-		scanner := bufio.NewScanner(bytes.NewReader(data))
-		plugins := make([]string, 0, 1000)
-		for scanner.Scan() {
-			if line := scanner.Text(); line != "" {
-				plugins = append(plugins, line)
+		cachedDefaultPluginsOnce.Do(func() {
+			data, err := file.GetEmbeddedFile("files/wordpress_plugins.txt")
+			if err != nil {
+				cachedDefaultPluginsErr = fmt.Errorf("failed to load default plugin list: %w", err)
+				return
 			}
-		}
-		return plugins, nil
+			scanner := bufio.NewScanner(bytes.NewReader(data))
+			plugins := make([]string, 0, 1000)
+			for scanner.Scan() {
+				if line := scanner.Text(); line != "" {
+					plugins = append(plugins, line)
+				}
+			}
+			cachedDefaultPlugins = plugins
+		})
+		return cachedDefaultPlugins, cachedDefaultPluginsErr
 	}
 	return file.ReadLines(filename)
 }

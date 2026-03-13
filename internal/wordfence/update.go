@@ -160,7 +160,7 @@ func handleFetchError(err error) {
 }
 
 func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
-	var vulnerabilities []Vulnerability
+	vulnerabilities := make([]Vulnerability, 0, len(wfData))
 
 	for _, vulnData := range wfData {
 		vulnMap, ok := vulnData.(map[string]interface{})

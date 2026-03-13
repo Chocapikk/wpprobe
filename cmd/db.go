@@ -34,7 +34,7 @@ var (
 
 func runUpdateDb(cmd *cobra.Command, args []string) error {
 	if apiKey, _ := cmd.Flags().GetString("api-key"); apiKey != "" {
-		os.Setenv("WORDFENCE_API_KEY", apiKey)
+		_ = os.Setenv("WORDFENCE_API_KEY", apiKey)
 	}
 
 	if err := updateWordfenceFunc(); err != nil {

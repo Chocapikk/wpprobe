@@ -23,6 +23,7 @@ import (
 	"context"
 	"sync"
 
+	wphttp "github.com/Chocapikk/wpprobe/internal/http"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 )
@@ -40,6 +41,11 @@ func ScanTargets(opts ScanOptions) {
 	config := buildScanConfig(opts, len(targets))
 	progress := createProgressManager(opts, len(targets))
 	writer := createWriter(opts)
+
+	// Create a single global rate limiter shared across all targets
+	if opts.SharedLimiter == nil && opts.RateLimit > 0 {
+		opts.SharedLimiter = wphttp.NewRateLimiter(opts.RateLimit)
+	}
 	defer closeWriter(writer)
 
 	execConfig := ScanExecutionConfig{

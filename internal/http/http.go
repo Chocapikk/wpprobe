@@ -20,7 +20,6 @@
 package http
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -374,10 +373,10 @@ func NormalizeURL(url string) string {
 }
 
 func SplitLines(data []byte) []string {
-	var lines []string
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	rawLines := bytes.Split(data, []byte{'\n'})
+	lines := make([]string, 0, len(rawLines))
+	for _, raw := range rawLines {
+		line := strings.TrimSpace(string(raw))
 		if line != "" {
 			lines = append(lines, line)
 		}

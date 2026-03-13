@@ -24,15 +24,25 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Chocapikk/wpprobe/internal/severity"
 	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/severity"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 )
 
+var vulnTypeOrder = []string{"Critical", "High", "Medium", "Low"}
+
+var vulnTypeStyles = map[string]lipgloss.Style{
+	"Critical": CriticalStyle,
+	"High":     HighStyle,
+	"Medium":   MediumStyle,
+	"Low":      LowStyle,
+}
+
+var authTypeOrder = []string{"unauth", "auth", "privileged", "unknown"}
 
 func buildPluginVulns(resultsList []file.PluginEntry) PluginVulnerabilities {
-	pluginVulns := PluginVulnerabilities{Plugins: make(map[string]VulnCategories)}
+	pluginVulns := PluginVulnerabilities{Plugins: make(map[string]VulnCategories, len(resultsList))}
 	for _, entry := range resultsList {
 		sevNormalized := severity.Normalize(entry.Severity)
 		cat := pluginVulns.Plugins[entry.Plugin]
@@ -54,31 +64,26 @@ func buildPluginVulns(resultsList []file.PluginEntry) PluginVulnerabilities {
 }
 
 func buildPluginAuthGroups(resultsList []file.PluginEntry) PluginAuthGroups {
-	pluginAuthGroups := PluginAuthGroups{Plugins: make(map[string]SeverityAuthGroup)}
+	pluginAuthGroups := PluginAuthGroups{Plugins: make(map[string]SeverityAuthGroup, len(resultsList))}
 
 	for _, entry := range resultsList {
 		sevLabel := severity.FormatTitleCase(entry.Severity)
 
-		if _, ok := pluginAuthGroups.Plugins[entry.Plugin]; !ok {
-			pluginAuthGroups.Plugins[entry.Plugin] = SeverityAuthGroup{
-				Severities: make(map[string]AuthGroup),
-			}
+		pag, ok := pluginAuthGroups.Plugins[entry.Plugin]
+		if !ok {
+			pag = SeverityAuthGroup{Severities: make(map[string]AuthGroup, 4)}
+			pluginAuthGroups.Plugins[entry.Plugin] = pag
 		}
 
-		if _, ok := pluginAuthGroups.Plugins[entry.Plugin].Severities[sevLabel]; !ok {
-			pluginAuthGroups.Plugins[entry.Plugin].Severities[sevLabel] = AuthGroup{
-				AuthTypes: make(map[string][]string),
-			}
+		ag, ok := pag.Severities[sevLabel]
+		if !ok {
+			ag = AuthGroup{AuthTypes: make(map[string][]string, 3)}
+			pag.Severities[sevLabel] = ag
 		}
-
-		authKey := severity.NormalizeAuth(entry.AuthType)
 
 		if len(entry.CVEs) > 0 {
-			pluginAuthGroups.Plugins[entry.Plugin].Severities[sevLabel].AuthTypes[authKey] =
-				append(
-					pluginAuthGroups.Plugins[entry.Plugin].Severities[sevLabel].AuthTypes[authKey],
-					entry.CVEs[0],
-				)
+			authKey := severity.NormalizeAuth(entry.AuthType)
+			ag.AuthTypes[authKey] = append(ag.AuthTypes[authKey], entry.CVEs[0])
 		}
 	}
 	return pluginAuthGroups
@@ -130,15 +135,7 @@ func DisplayResults(ctx DisplayResultsContext) {
 		ctx.Progress.RenderBlank()
 	}
 
-	vTypes := []string{"Critical", "High", "Medium", "Low"}
-	vStyles := map[string]lipgloss.Style{
-		"Critical": CriticalStyle,
-		"High":     HighStyle,
-		"Medium":   MediumStyle,
-		"Low":      LowStyle,
-	}
-
-	summary := buildSummaryLine(ctx.Target, pv.Plugins, vTypes, vStyles)
+	summary := buildSummaryLine(ctx.Target, pv.Plugins, vulnTypeOrder, vulnTypeStyles)
 	root := tree.Root(TitleStyle.Render(summary))
 
 	for _, plugin := range sortedPluginsByConfidence(ctx.Detected, ctx.PluginRes.Plugins, pv.Plugins) {
@@ -156,14 +153,14 @@ func DisplayResults(ctx DisplayResultsContext) {
 			continue
 		}
 
-		for _, sev := range vTypes {
+		for _, sev := range vulnTypeOrder {
 			sGrp, sOk := authGroups.Severities[sev]
 			if !sOk {
 				continue
 			}
 
-			sevNode := tree.Root(vStyles[sev].Render(sev))
-			for _, key := range []string{"unauth", "auth", "privileged", "unknown"} {
+			sevNode := tree.Root(vulnTypeStyles[sev].Render(sev))
+			for _, key := range authTypeOrder {
 				cves, cOk := sGrp.AuthTypes[key]
 				if !cOk {
 					continue
@@ -231,7 +228,7 @@ func sortedPluginsByConfidence(
 	pluginVulns map[string]VulnCategories,
 ) []string {
 
-	var plugins []PluginDisplayData
+	plugins := make([]PluginDisplayData, 0, len(detectedPlugins))
 	for plugin, version := range detectedPlugins {
 		noVersion := version == "unknown"
 		data := pluginData[plugin]

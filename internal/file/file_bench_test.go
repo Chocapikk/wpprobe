@@ -31,13 +31,13 @@ func BenchmarkReadLines_Small(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
-	defer tmpfile.Close()
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+	defer func() { _ = tmpfile.Close() }()
 
 	if _, err := tmpfile.WriteString(content); err != nil {
 		b.Fatal(err)
 	}
-	tmpfile.Close()
+	_ = tmpfile.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -55,13 +55,13 @@ func BenchmarkReadLines_Medium(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
-	defer tmpfile.Close()
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+	defer func() { _ = tmpfile.Close() }()
 
 	if _, err := tmpfile.WriteString(content); err != nil {
 		b.Fatal(err)
 	}
-	tmpfile.Close()
+	_ = tmpfile.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -79,13 +79,13 @@ func BenchmarkReadLines_Large(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
-	defer tmpfile.Close()
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
+	defer func() { _ = tmpfile.Close() }()
 
 	if _, err := tmpfile.WriteString(content); err != nil {
 		b.Fatal(err)
 	}
-	tmpfile.Close()
+	_ = tmpfile.Close()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
