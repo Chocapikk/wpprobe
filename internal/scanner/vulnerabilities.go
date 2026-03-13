@@ -231,6 +231,7 @@ func createVulnerablePluginEntry(
 		Plugin:     plugin,
 		Version:    version,
 		CVEs:       []string{v.CVE},
+		CVELinks:   []string{v.CVELink},
 		Severity:   v.Severity,
 		AuthType:   v.AuthType,
 		Title:      v.Title,
