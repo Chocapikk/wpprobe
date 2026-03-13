@@ -216,6 +216,7 @@ func createEmptyPluginEntry(plugin, version string) file.PluginEntry {
 	return file.PluginEntry{
 		Plugin:   plugin,
 		Version:  version,
+		CVEs:     []string{},
 		Severity: "none",
 		AuthType: "n/a",
 	}
