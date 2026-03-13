@@ -55,10 +55,11 @@ func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps
 		maxRedirects = defaultMaxRedirects
 	}
 	transport := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		MaxConnsPerHost:   20,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		MaxConnsPerHost:     20,
+		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:   30 * time.Second,
+		IdleConnTimeout:     30 * time.Second,
 	}
 
 	// Configure proxy if provided
@@ -259,14 +260,15 @@ func (h *HTTPClientManager) GetWithContext(ctx context.Context, url string) (str
 			if redirects >= h.maxRedirects {
 				return "", errors.New("stopped after max redirects")
 			}
-		location, err := resp.Location()
-		if err != nil {
-			return "", fmt.Errorf("failed to get redirect location: %w", err)
-		}
-		redirectReq, err := http.NewRequestWithContext(ctx, "GET", location.String(), nil)
-		if err != nil {
-			return "", fmt.Errorf("failed to create redirect request: %w", err)
-		}
+			location, err := resp.Location()
+			if err != nil {
+				return "", fmt.Errorf("failed to get redirect location: %w", err)
+			}
+			redirectReq, err := http.NewRequestWithContext(ctx, "GET", location.String(), nil)
+			if err != nil {
+				return "", fmt.Errorf("failed to create redirect request: %w", err)
+			}
+			_ = resp.Body.Close()
 			resp, err = h.client.Do(redirectReq)
 			if err != nil {
 				if ctx.Err() != nil {

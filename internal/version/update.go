@@ -63,7 +63,7 @@ func getLatestVersion() (string, error) {
 		logger.DefaultLogger.Error("Failed to fetch latest release: " + err.Error())
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.DefaultLogger.Error(fmt.Sprintf("GitHub API error: %d", resp.StatusCode))
@@ -111,7 +111,7 @@ func AutoUpdate(currentVersion string) error {
 		logger.DefaultLogger.Error("Failed to download update: " + err.Error())
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.DefaultLogger.Error(fmt.Sprintf("Update not found: %s", updateURL))

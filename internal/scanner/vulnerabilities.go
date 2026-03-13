@@ -63,10 +63,21 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 		Ctx:                 req.Ctx,
 	}
 
+	scanCtx := req.Ctx
+	if scanCtx == nil {
+		scanCtx = context.Background()
+	}
+
+pluginLoop:
 	for _, plugin := range req.Plugins {
 		wg.Add(1)
-		sem <- struct{}{}
-		go checkPluginVulnerabilities(plugin, req.Opts, checkCtx)
+		select {
+		case sem <- struct{}{}:
+			go checkPluginVulnerabilities(plugin, req.Opts, checkCtx)
+		case <-scanCtx.Done():
+			wg.Done()
+			break pluginLoop
+		}
 	}
 
 	wg.Wait()

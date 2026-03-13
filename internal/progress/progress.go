@@ -37,8 +37,10 @@ const (
 )
 
 type ProgressManager struct {
-	bar *progressbar.ProgressBar
-	mu  sync.Mutex
+	bar      *progressbar.ProgressBar
+	mu       sync.Mutex
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 // NewProgressBar creates a progress bar with a fixed width and padded/truncated description
@@ -64,9 +66,14 @@ func NewProgressBar(total int, description string) *ProgressManager {
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	pm.done = make(chan struct{})
 	go func() {
-		<-signalChan
-		pm.Finish()
+		select {
+		case <-signalChan:
+			pm.Finish()
+		case <-pm.done:
+		}
+		signal.Stop(signalChan)
 	}()
 
 	return pm
@@ -85,6 +92,9 @@ func (p *ProgressManager) Finish() {
 	defer p.mu.Unlock()
 	_ = p.bar.Finish()
 	fmt.Fprintln(ansi.NewAnsiStderr())
+	if p.done != nil {
+		p.doneOnce.Do(func() { close(p.done) })
+	}
 }
 
 // RenderBlank renders an empty bar state.

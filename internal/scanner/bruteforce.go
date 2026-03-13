@@ -56,9 +56,13 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-		logger.DefaultLogger.Info("Interruption signal received, stopping bruteforce scan...")
-		cancel()
+		select {
+		case <-sigChan:
+			logger.DefaultLogger.Info("Interruption signal received, stopping bruteforce scan...")
+			cancel()
+		case <-ctx.Done():
+		}
+		signal.Stop(sigChan)
 	}()
 
 	bruteCtx := BruteforceContext{
