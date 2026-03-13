@@ -32,17 +32,17 @@ import (
 func fetchEndpointsFromPath(ctx context.Context, target, path string, httpClient *http.HTTPClientManager) []string {
 	response, err := httpClient.GetWithContext(ctx, target+path)
 	if err != nil {
-		return []string{}
+		return nil
 	}
 
 	var jsonData map[string]interface{}
 	if err := json.NewDecoder(strings.NewReader(response)).Decode(&jsonData); err != nil {
-		return []string{}
+		return nil
 	}
 
 	routes, ok := jsonData["routes"].(map[string]interface{})
 	if !ok {
-		return []string{}
+		return nil
 	}
 
 	endpoints := make([]string, 0, len(routes))
@@ -60,7 +60,7 @@ func FetchEndpoints(ctx context.Context, target string, cfg http.Config) []strin
 
 	select {
 	case <-ctx.Done():
-		return []string{}
+		return nil
 	default:
 	}
 

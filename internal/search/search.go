@@ -65,37 +65,33 @@ func FilterAll(
 }
 
 func filterByCriteria(vs []wordfence.Vulnerability, criteria FilterCriteria) []wordfence.Vulnerability {
+	// Pre-lowercase criteria once to avoid repeated allocations per-vulnerability
+	cveLower := strings.ToLower(criteria.CVE)
+	pluginLower := strings.ToLower(criteria.Plugin)
+	titleLower := strings.ToLower(criteria.Title)
+	sevLower := strings.ToLower(criteria.Severity)
+	authLower := strings.ToLower(criteria.Auth)
+
 	out := make([]wordfence.Vulnerability, 0, len(vs))
 	for _, v := range vs {
-		if !matchesCriteria(v, criteria) {
+		if cveLower != "" && !strings.Contains(strings.ToLower(v.CVE), cveLower) {
+			continue
+		}
+		if pluginLower != "" && !strings.Contains(strings.ToLower(v.Slug), pluginLower) {
+			continue
+		}
+		if titleLower != "" && !strings.Contains(strings.ToLower(v.Title), titleLower) {
+			continue
+		}
+		if sevLower != "" && strings.ToLower(v.Severity) != sevLower {
+			continue
+		}
+		if authLower != "" && strings.ToLower(v.AuthType) != authLower {
 			continue
 		}
 		out = append(out, v)
 	}
 	return out
-}
-
-func matchesCriteria(v wordfence.Vulnerability, criteria FilterCriteria) bool {
-	if criteria.CVE != "" && !containsIgnoreCase(v.CVE, criteria.CVE) {
-		return false
-	}
-	if criteria.Plugin != "" && !containsIgnoreCase(v.Slug, criteria.Plugin) {
-		return false
-	}
-	if criteria.Title != "" && !containsIgnoreCase(v.Title, criteria.Title) {
-		return false
-	}
-	if criteria.Severity != "" && !strings.EqualFold(v.Severity, criteria.Severity) {
-		return false
-	}
-	if criteria.Auth != "" && !strings.EqualFold(v.AuthType, criteria.Auth) {
-		return false
-	}
-	return true
-}
-
-func containsIgnoreCase(s, substr string) bool {
-	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 // GroupByPlugin groups vulnerabilities by plugin slug.
@@ -156,11 +152,11 @@ func compareVulnerabilities(i, j int, vulns []wordfence.Vulnerability) bool {
 }
 
 func countBySeverity(list []wordfence.Vulnerability) map[string]int {
-	severities := make([]string, len(list))
-	for i, v := range list {
-		severities[i] = v.Severity
+	counts := severity.InitializeCounts()
+	for _, v := range list {
+		counts[severity.Normalize(v.Severity)]++
 	}
-	return severity.CountBySeverity(severities)
+	return counts
 }
 
 func buildPluginNode(slug string, counts map[string]int) *tree.Tree {
@@ -186,19 +182,18 @@ func formatSeverityCount(abbrev, sev string, counts map[string]int) string {
 }
 
 func getSeverityStyle(sev string) func(string) string {
-	sevLower := strings.ToLower(sev)
-	styles := map[string]func(string) string{
-		"critical": func(s string) string { return scanner.CriticalStyle.Render(s) },
-		"high":     func(s string) string { return scanner.HighStyle.Render(s) },
-		"medium":   func(s string) string { return scanner.MediumStyle.Render(s) },
-		"low":      func(s string) string { return scanner.LowStyle.Render(s) },
-		"unknown":  func(s string) string { return scanner.UnknownStyle.Render(s) },
+	switch strings.ToLower(sev) {
+	case "critical":
+		return func(s string) string { return scanner.CriticalStyle.Render(s) }
+	case "high":
+		return func(s string) string { return scanner.HighStyle.Render(s) }
+	case "medium":
+		return func(s string) string { return scanner.MediumStyle.Render(s) }
+	case "low":
+		return func(s string) string { return scanner.LowStyle.Render(s) }
+	default:
+		return func(s string) string { return scanner.UnknownStyle.Render(s) }
 	}
-	styleFunc, ok := styles[sevLower]
-	if !ok {
-		return styles["unknown"]
-	}
-	return styleFunc
 }
 
 func buildDownloadLink(slug string) *tree.Tree {
@@ -222,9 +217,10 @@ func addSeverityDetails(pluginNode *tree.Tree, list []wordfence.Vulnerability) {
 }
 
 func filterBySeverity(vs []wordfence.Vulnerability, sev string) []wordfence.Vulnerability {
-	out := make([]wordfence.Vulnerability, 0)
+	sevLower := strings.ToLower(sev)
+	out := make([]wordfence.Vulnerability, 0, len(vs)/4)
 	for _, v := range vs {
-		if !strings.EqualFold(v.Severity, sev) {
+		if strings.ToLower(v.Severity) != sevLower {
 			continue
 		}
 		out = append(out, v)

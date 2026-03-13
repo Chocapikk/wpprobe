@@ -22,7 +22,6 @@ package scanner
 import (
 	"context"
 	"io"
-	"regexp"
 	"strings"
 	"time"
 
@@ -31,7 +30,24 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/http"
 )
 
-var slugPattern = regexp.MustCompile(`(?i)^[a-z][a-z0-9_-]*$`)
+// isValidSlug checks if s matches (?i)[a-z][a-z0-9_-]* without regex overhead.
+func isValidSlug(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	c := s[0] | 0x20 // lowercase
+	if c < 'a' || c > 'z' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c = s[i] | 0x20
+		if (c >= 'a' && c <= 'z') || (s[i] >= '0' && s[i] <= '9') || s[i] == '_' || s[i] == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
 
 func discoverPluginsFromHTML(ctx context.Context, target string, cfg http.Config) ([]string, error) {
 	if ctx == nil {
@@ -82,8 +98,32 @@ func discoverPluginsFromHTML(ctx context.Context, target string, cfg http.Config
 	return slugs, nil
 }
 
-func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
+// extractSlugFromPath finds prefix (e.g. "wp-content/plugins/") in val and extracts the slug after it.
+func extractSlugFromPath(val, prefix string, dest map[string]struct{}) {
+	search := val
+	for {
+		idx := strings.Index(search, prefix)
+		if idx < 0 {
+			return
+		}
+		after := search[idx+len(prefix):]
+		// Extract slug up to next "/" or end of string
+		end := strings.IndexByte(after, '/')
+		var slug string
+		if end < 0 {
+			slug = after
+		} else {
+			slug = after[:end]
+		}
+		if isValidSlug(slug) {
+			dest[slug] = struct{}{}
+		}
+		// Continue searching after this match
+		search = after
+	}
+}
 
+func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
 	z := html.NewTokenizer(r)
 	for {
 		tt := z.Next()
@@ -100,19 +140,9 @@ func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
 		tok := z.Token()
 		for _, attr := range tok.Attr {
 			val := attr.Val
-			if !strings.Contains(val, "wp-content") {
-				continue
-			}
-			parts := strings.Split(val, "/")
-			for i := 0; i < len(parts)-2; i++ {
-				if parts[i] == "wp-content" &&
-					(parts[i+1] == "plugins" || parts[i+1] == "uploads") {
-					slug := parts[i+2]
-					if slugPattern.MatchString(slug) {
-						dest[slug] = struct{}{}
-					}
-				}
-			}
+			// Use index-based search to avoid strings.Split allocation
+			extractSlugFromPath(val, "wp-content/plugins/", dest)
+			extractSlugFromPath(val, "wp-content/uploads/", dest)
 		}
 	}
 }

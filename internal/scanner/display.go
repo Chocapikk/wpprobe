@@ -95,7 +95,7 @@ func buildSummaryLine(
 	vulnTypes []string,
 	vulnStyles map[string]lipgloss.Style,
 ) string {
-	var summaryParts []string
+	summaryParts := make([]string, 0, len(vulnTypes))
 	for _, t := range vulnTypes {
 		var total int
 		for _, cat := range pluginVulns {

@@ -272,8 +272,13 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 		} else if !containsVulnerability(authGroup.Vulnerabilities, vuln.CVE) {
 			authGroup.Vulnerabilities = append(authGroup.Vulnerabilities, vuln)
 		}
+	}
 
-		sortSeveritiesByOrder(vg.Severities)
+	// Sort severities once after all entries are processed, not per-entry
+	for _, pr := range pluginResultsMap {
+		for i := range pr.Versions {
+			sortSeveritiesByOrder(pr.Versions[i].Severities)
+		}
 	}
 
 	var pluginsColl PluginsCollection

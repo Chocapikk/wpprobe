@@ -38,9 +38,9 @@ func DetectPlugins(
 	}
 
 	// Build endpoint map for O(1) lookup instead of O(n) linear search
-	endpointMap := make(map[string]bool, len(detectedEndpoints))
+	endpointMap := make(map[string]struct{}, len(detectedEndpoints))
 	for _, ep := range detectedEndpoints {
-		endpointMap[ep] = true
+		endpointMap[ep] = struct{}{}
 	}
 
 	for plugin, knownRoutes := range pluginEndpoints {
@@ -49,7 +49,7 @@ func DetectPlugins(
 		}
 		var matchCount int
 		for _, knownRoute := range knownRoutes {
-			if endpointMap[knownRoute] {
+			if _, ok := endpointMap[knownRoute]; ok {
 				matchCount++
 			}
 		}
@@ -67,11 +67,8 @@ func DetectPlugins(
 
 	// Mark ambiguous plugins (plugins that share the same endpoints)
 	ambiguousGroups := make(map[string][]string)
-	pluginEndpointsMap := make(map[string]string)
 	for plugin := range detection.Plugins {
-		endpoints := pluginEndpoints[plugin]
-		key := buildEndpointsKey(endpoints)
-		pluginEndpointsMap[plugin] = key
+		key := buildEndpointsKey(pluginEndpoints[plugin])
 		ambiguousGroups[key] = append(ambiguousGroups[key], plugin)
 	}
 

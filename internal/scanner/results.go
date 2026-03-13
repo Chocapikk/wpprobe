@@ -83,8 +83,6 @@ func buildBruteforceResult(detected []string, versions map[string]string) ([]str
 		result.Plugins[p] = &PluginData{
 			Score:      1,
 			Confidence: 100.0,
-			Ambiguous:  false,
-			Matches:    []string{},
 		}
 	}
 	return detected, result
@@ -97,14 +95,14 @@ func calculateRemainingPlugins(stealthyList []string, opts ScanOptions) []string
 		return nil
 	}
 
-	seen := make(map[string]bool, len(stealthyList))
+	seen := make(map[string]struct{}, len(stealthyList))
 	for _, p := range stealthyList {
-		seen[p] = true
+		seen[p] = struct{}{}
 	}
 
-	var remaining []string
+	remaining := make([]string, 0, len(allPlugins))
 	for _, p := range allPlugins {
-		if !seen[p] {
+		if _, exists := seen[p]; !exists {
 			remaining = append(remaining, p)
 		}
 	}
@@ -112,7 +110,8 @@ func calculateRemainingPlugins(stealthyList []string, opts ScanOptions) []string
 }
 
 func combineHybridResults(stealthyList []string, stealthyRes PluginDetectionResult, brutefound []string) ([]string, PluginDetectionResult) {
-	combined := append([]string{}, stealthyList...)
+	combined := make([]string, len(stealthyList), len(stealthyList)+len(brutefound))
+	copy(combined, stealthyList)
 	combined = append(combined, brutefound...)
 
 	result := stealthyRes
@@ -120,8 +119,6 @@ func combineHybridResults(stealthyList []string, stealthyRes PluginDetectionResu
 		result.Plugins[p] = &PluginData{
 			Score:      1,
 			Confidence: 100.0,
-			Ambiguous:  false,
-			Matches:    []string{},
 		}
 	}
 	result.Detected = combined

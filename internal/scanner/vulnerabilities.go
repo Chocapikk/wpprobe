@@ -31,7 +31,7 @@ import (
 // CheckVulnerabilities checks vulnerabilities for detected plugins and returns entries.
 func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []file.PluginEntry) {
 	entriesMap := make(map[string]string, len(req.Plugins))
-	var entriesList []file.PluginEntry
+	entriesList := make([]file.PluginEntry, 0, len(req.Plugins))
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -190,7 +190,7 @@ func buildPluginEntries(
 		return []file.PluginEntry{createEmptyPluginEntry(plugin, version)}
 	}
 
-	seenCVEs := make(map[string]bool, len(matched))
+	seenCVEs := make(map[string]struct{}, len(matched))
 	entries := make([]file.PluginEntry, 0, len(matched))
 
 	for _, v := range matched {
@@ -198,10 +198,13 @@ func buildPluginEntries(
 		if cve == "" {
 			cve = v.Title
 		}
-		if cve == "" || seenCVEs[cve] {
+		if cve == "" {
 			continue
 		}
-		seenCVEs[cve] = true
+		if _, seen := seenCVEs[cve]; seen {
+			continue
+		}
+		seenCVEs[cve] = struct{}{}
 		entries = append(entries, createVulnerablePluginEntry(plugin, version, v))
 	}
 

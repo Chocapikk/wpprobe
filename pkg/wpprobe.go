@@ -245,8 +245,8 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 	}
 
 	pluginMap := make(map[string]*PluginResult)
-	// Track seen CVEs per plugin per severity to deduplicate
-	seenCVEs := make(map[string]map[string]map[string]bool) // plugin -> severity -> cve -> seen
+	// Track seen CVEs with flat composite key: "plugin:severity:cve"
+	seenCVEs := make(map[string]struct{})
 
 	for _, entry := range entries {
 		// Skip vulnerabilities if version is unknown or empty
@@ -258,19 +258,17 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 		plugin, exists := pluginMap[entry.Plugin]
 		if !exists {
 			plugin = &PluginResult{
-				Name:           entry.Plugin,
-				Version:        entry.Version,
-				Confidence:     100.0,
-				Ambiguous:      false,
+				Name:       entry.Plugin,
+				Version:    entry.Version,
+				Confidence: 100.0,
 				Vulnerabilities: VulnerabilitiesBySeverity{
-					Critical: make([]Vulnerability, 0),
-					High:     make([]Vulnerability, 0),
-					Medium:   make([]Vulnerability, 0),
-					Low:      make([]Vulnerability, 0),
+					Critical: make([]Vulnerability, 0, 4),
+					High:     make([]Vulnerability, 0, 4),
+					Medium:   make([]Vulnerability, 0, 4),
+					Low:      make([]Vulnerability, 0, 4),
 				},
 			}
 			pluginMap[entry.Plugin] = plugin
-			seenCVEs[entry.Plugin] = make(map[string]map[string]bool)
 		}
 
 		cve := ""
@@ -282,15 +280,12 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 		if cve == "" {
 			continue
 		}
-		
-		if seenCVEs[entry.Plugin][entry.Severity] == nil {
-			seenCVEs[entry.Plugin][entry.Severity] = make(map[string]bool)
-		}
-		cveLower := strings.ToLower(cve)
-		if seenCVEs[entry.Plugin][entry.Severity][cveLower] {
+
+		dedupKey := entry.Plugin + ":" + entry.Severity + ":" + strings.ToLower(cve)
+		if _, seen := seenCVEs[dedupKey]; seen {
 			continue
 		}
-		seenCVEs[entry.Plugin][entry.Severity][cveLower] = true
+		seenCVEs[dedupKey] = struct{}{}
 
 		vuln := Vulnerability{
 			CVE:             cve,

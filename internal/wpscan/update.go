@@ -23,7 +23,6 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io"
 	nethttp "net/http"
 	"os"
 	"time"
@@ -118,7 +117,7 @@ func updateWPScanEnterprise(apiToken string) error {
 }
 
 func processPluginsData(pluginsData map[string]interface{}) []Vulnerability {
-	var allVulnerabilities []Vulnerability
+	allVulnerabilities := make([]Vulnerability, 0, len(pluginsData))
 	for pluginSlug, pluginData := range pluginsData {
 		if pluginMap, ok := pluginData.(map[string]interface{}); ok {
 			vulns, err := processWPScanPluginData(pluginSlug, map[string]interface{}{pluginSlug: pluginMap})
@@ -156,13 +155,8 @@ func downloadEnterpriseExport(filename string, apiToken string) (map[string]inte
 	}
 	defer func() { _ = gzReader.Close() }()
 
-	data, err := io.ReadAll(gzReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read data: %w", err)
-	}
-
 	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
+	if err := json.NewDecoder(gzReader).Decode(&result); err != nil {
 		return nil, fmt.Errorf("JSON decoding error: %w", err)
 	}
 
@@ -196,17 +190,17 @@ func makeAPIRequest(url, headerName, headerValue string, timeout time.Duration, 
 }
 
 func processWPScanPluginData(pluginSlug string, data map[string]interface{}) ([]Vulnerability, error) {
-	var vulnerabilities []Vulnerability
-
 	pluginData, ok := data[pluginSlug].(map[string]interface{})
 	if !ok {
-		return vulnerabilities, nil
+		return nil, nil
 	}
 
 	vulnsList, ok := pluginData["vulnerabilities"].([]interface{})
 	if !ok {
-		return vulnerabilities, nil
+		return nil, nil
 	}
+
+	vulnerabilities := make([]Vulnerability, 0, len(vulnsList))
 
 	for _, vulnRaw := range vulnsList {
 		vulnMap, ok := vulnRaw.(map[string]interface{})

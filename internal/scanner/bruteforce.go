@@ -44,7 +44,7 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 	normalized := http.NormalizeURL(req.Target)
 	sharedClient := req.HTTP.NewClient(10 * time.Second)
 	sharedClient.EnableKeepAlives(req.Threads)
-	var detected []string
+	detected := make([]string, 0, len(req.Plugins)/10)
 	versions := make(map[string]string)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -135,14 +135,14 @@ func HybridScan(req HybridScanRequest) ([]string, map[string]string) {
 		return detected, versions
 	}
 
-	detectedMap := make(map[string]bool, len(req.StealthyPlugins))
+	detectedMap := make(map[string]struct{}, len(req.StealthyPlugins))
 	for _, p := range req.StealthyPlugins {
-		detectedMap[p] = true
+		detectedMap[p] = struct{}{}
 	}
 
-	var remaining []string
+	remaining := make([]string, 0, len(req.BruteforcePlugins))
 	for _, p := range req.BruteforcePlugins {
-		if !detectedMap[p] {
+		if _, exists := detectedMap[p]; !exists {
 			remaining = append(remaining, p)
 		}
 	}

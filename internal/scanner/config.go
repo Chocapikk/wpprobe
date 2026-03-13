@@ -20,8 +20,6 @@
 package scanner
 
 import (
-	"math"
-
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 	"github.com/Chocapikk/wpprobe/internal/progress"
@@ -61,7 +59,10 @@ func buildScanConfig(opts ScanOptions, targetCount int) scanConfig {
 
 	// For multiple targets, distribute threads more efficiently
 	// Ensure we use all threads: perSite * siteConcurrent should be close to totalThreads
-	siteConcurrent := int(math.Min(float64(totalThreads), float64(targetCount)))
+	siteConcurrent := totalThreads
+	if targetCount < siteConcurrent {
+		siteConcurrent = targetCount
+	}
 	perSite := totalThreads / siteConcurrent
 	if perSite < 1 {
 		perSite = 1
