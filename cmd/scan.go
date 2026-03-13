@@ -125,7 +125,7 @@ func init() {
 		StringArrayP("header", "H", []string{}, "HTTP header to include in requests. Can be specified multiple times.")
 	scanCmd.Flags().String("proxy", "", "HTTP/HTTPS proxy URL (e.g., http://127.0.0.1:8080)")
 	scanCmd.Flags().
-		Int("rate-limit", 0, "Maximum requests per second (0 = unlimited). Use to avoid overwhelming targets.")
+		Int("rate-limit", 50, "Maximum requests per second (0 = unlimited). Default 50 to avoid flooding network.")
 }
 
 func mustBool(value bool, err error) bool {

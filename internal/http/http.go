@@ -56,7 +56,9 @@ func NewHTTPClient(timeout time.Duration, headers []string, proxyURL string, rps
 	}
 	transport := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		DisableKeepAlives: true,
+		MaxConnsPerHost:   20,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:   30 * time.Second,
 	}
 
 	// Configure proxy if provided
