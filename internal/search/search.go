@@ -64,29 +64,38 @@ func FilterAll(
 	return filterByCriteria(vs, criteria)
 }
 
-func filterByCriteria(vs []wordfence.Vulnerability, criteria FilterCriteria) []wordfence.Vulnerability {
-	// Pre-lowercase criteria once to avoid repeated allocations per-vulnerability
-	cveLower := strings.ToLower(criteria.CVE)
-	pluginLower := strings.ToLower(criteria.Plugin)
-	titleLower := strings.ToLower(criteria.Title)
-	sevLower := strings.ToLower(criteria.Severity)
-	authLower := strings.ToLower(criteria.Auth)
+// containsFold reports whether substr is within s, case-insensitively, without allocating.
+func containsFold(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if strings.EqualFold(s[i:i+len(substr)], substr) {
+			return true
+		}
+	}
+	return false
+}
 
+func filterByCriteria(vs []wordfence.Vulnerability, criteria FilterCriteria) []wordfence.Vulnerability {
 	out := make([]wordfence.Vulnerability, 0, len(vs))
 	for _, v := range vs {
-		if cveLower != "" && !strings.Contains(strings.ToLower(v.CVE), cveLower) {
+		if criteria.CVE != "" && !containsFold(v.CVE, criteria.CVE) {
 			continue
 		}
-		if pluginLower != "" && !strings.Contains(strings.ToLower(v.Slug), pluginLower) {
+		if criteria.Plugin != "" && !containsFold(v.Slug, criteria.Plugin) {
 			continue
 		}
-		if titleLower != "" && !strings.Contains(strings.ToLower(v.Title), titleLower) {
+		if criteria.Title != "" && !containsFold(v.Title, criteria.Title) {
 			continue
 		}
-		if sevLower != "" && strings.ToLower(v.Severity) != sevLower {
+		if criteria.Severity != "" && !strings.EqualFold(v.Severity, criteria.Severity) {
 			continue
 		}
-		if authLower != "" && strings.ToLower(v.AuthType) != authLower {
+		if criteria.Auth != "" && !strings.EqualFold(v.AuthType, criteria.Auth) {
 			continue
 		}
 		out = append(out, v)

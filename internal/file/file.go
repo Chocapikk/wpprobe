@@ -20,7 +20,6 @@
 package file
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
@@ -343,23 +342,16 @@ func GetWriter(outputFile string) WriterInterface {
 //////////////////////////////
 
 func ReadLines(filename string) ([]string, error) {
-	file, err := os.Open(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to open file: " + err.Error())
 		return nil, err
 	}
-	defer func() { _ = file.Close() }()
-
-	scanner := bufio.NewScanner(file)
-	lines := make([]string, 0, 1000)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+	if len(data) == 0 {
+		return nil, nil
 	}
-	if err := scanner.Err(); err != nil {
-		logger.DefaultLogger.Error("Failed to read lines: " + err.Error())
-		return nil, err
-	}
-	return lines, nil
+	content := strings.TrimRight(string(data), "\n")
+	return strings.Split(content, "\n"), nil
 }
 
 func GetStoragePath(filename string) (string, error) {
