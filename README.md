@@ -180,14 +180,21 @@ http://example.com,give,2.20.1,critical,Unauth,CVE-2025-22777,https://www.cve.or
                 "vulnerabilities": [
                   {
                     "cve": "CVE-2025-22777",
+                    "cve_link": "https://www.cve.org/CVERecord?id=CVE-2025-22777",
+                    "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection",
                     "cvss_score": 9.8,
-                    "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection"
+                    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
                   }
                 ]
               }
             ]
           }
         ]
+      }
+    ],
+    "wordpress-seo": [
+      {
+        "version": "27.1.1"
       }
     ]
   }
