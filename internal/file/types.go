@@ -75,7 +75,7 @@ func (s SeverityEntry) MarshalJSON() ([]byte, error) {
 // VersionGroup groups vulnerabilities by version.
 type VersionGroup struct {
 	Version    string          `json:"version"`
-	Severities []SeverityEntry `json:"severities"`
+	Severities []SeverityEntry `json:"severities,omitempty"`
 }
 
 // PluginResult represents a plugin with its version groups.

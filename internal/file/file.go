@@ -257,6 +257,12 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 		}
 
 		vg := findOrCreateVersionGroup(pr, version)
+
+		// Skip empty severity entries - just keep plugin name + version
+		if len(entry.CVEs) == 0 && severity == "none" {
+			continue
+		}
+
 		se := findOrCreateSeverityEntry(vg, severity)
 
 		auth = normalizeAuthType(auth)
@@ -264,11 +270,7 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 		vuln := buildVulnerabilityFromEntry(entry)
 
 		authGroup := findOrCreateAuthGroup(se, authFormatted)
-		if len(entry.CVEs) == 0 && severity == "none" {
-			if len(authGroup.Vulnerabilities) == 0 {
-				authGroup.Vulnerabilities = append(authGroup.Vulnerabilities, vuln)
-			}
-		} else if !containsVulnerability(authGroup.Vulnerabilities, vuln.CVE) {
+		if !containsVulnerability(authGroup.Vulnerabilities, vuln.CVE) {
 			authGroup.Vulnerabilities = append(authGroup.Vulnerabilities, vuln)
 		}
 	}

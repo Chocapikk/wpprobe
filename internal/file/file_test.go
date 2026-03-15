@@ -166,6 +166,153 @@ func TestJSONWriter_WriteResults(t *testing.T) {
 	}
 }
 
+// TestJSONWriter_EmptySeveritiesOmitted verifies that plugins detected without
+// known vulnerabilities only keep their version in the JSON output and do not
+// produce bloated severity / vulnerability objects.
+// See: https://github.com/Chocapikk/wpprobe/issues/20
+func TestJSONWriter_EmptySeveritiesOmitted(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_empty_sev_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	writer := NewJSONWriter(tmpFile.Name())
+
+	results := []PluginEntry{
+		{
+			Plugin:     "vulnerable-plugin",
+			Version:    "2.0",
+			Severity:   "high",
+			AuthType:   "Unauth",
+			CVEs:       []string{"CVE-2025-1234"},
+			CVELinks:   []string{"https://www.cve.org/CVERecord?id=CVE-2025-1234"},
+			Title:      "SQL Injection",
+			CVSSScore:  9.8,
+			CVSSVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+		},
+		{
+			Plugin:   "clean-plugin",
+			Version:  "3.1.0",
+			Severity: "none",
+			AuthType: "n/a",
+			CVEs:     []string{},
+		},
+		{
+			Plugin:   "another-clean-plugin",
+			Version:  "unknown",
+			Severity: "none",
+			AuthType: "n/a",
+			CVEs:     []string{},
+		},
+	}
+
+	writer.WriteResults("http://example.com", results)
+	writer.Close()
+
+	raw, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read JSON: %v", err)
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	plugins := data["plugins"].(map[string]interface{})
+
+	// Vulnerable plugin must have severities populated
+	vulnVersions := plugins["vulnerable-plugin"].([]interface{})
+	vulnVG := vulnVersions[0].(map[string]interface{})
+	sevs := vulnVG["severities"].([]interface{})
+	if len(sevs) == 0 {
+		t.Error("Expected vulnerable-plugin to have non-empty severities")
+	}
+
+	// Clean plugins must be present with version but no severities key at all
+	for _, name := range []string{"clean-plugin", "another-clean-plugin"} {
+		versions, exists := plugins[name]
+		if !exists {
+			t.Errorf("Expected %q in plugins output", name)
+			continue
+		}
+		vg := versions.([]interface{})[0].(map[string]interface{})
+
+		if name == "clean-plugin" && vg["version"] != "3.1.0" {
+			t.Errorf("Expected version 3.1.0 for %s, got %v", name, vg["version"])
+		}
+
+		if _, hasSev := vg["severities"]; hasSev {
+			t.Errorf("Expected no severities key for %s, but it was present", name)
+		}
+	}
+}
+
+// TestCSVWriter_EmptyEntriesPreserved verifies that plugins without
+// vulnerabilities still appear as rows in the CSV output (slug + version).
+// See: https://github.com/Chocapikk/wpprobe/issues/20
+func TestCSVWriter_EmptyEntriesPreserved(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_csv_empty_*.csv")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	writer := NewCSVWriter(tmpFile.Name())
+
+	results := []PluginEntry{
+		{
+			Plugin:   "vulnerable-plugin",
+			Version:  "2.0",
+			Severity: "high",
+			AuthType: "Unauth",
+			CVEs:     []string{"CVE-2025-1234"},
+			Title:    "SQL Injection",
+		},
+		{
+			Plugin:   "clean-plugin",
+			Version:  "3.1.0",
+			Severity: "none",
+			AuthType: "n/a",
+			CVEs:     []string{},
+		},
+	}
+
+	writer.WriteResults("http://example.com", results)
+	writer.Close()
+
+	file, err := os.Open(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to open CSV: %v", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	records, err := csv.NewReader(file).ReadAll()
+	if err != nil {
+		t.Fatalf("Failed to read CSV: %v", err)
+	}
+
+	// header + 2 data rows
+	if len(records) != 3 {
+		t.Fatalf("Expected 3 rows (header + 2 data), got %d", len(records))
+	}
+
+	// Both plugins must be present (sorted by severity: none < high)
+	found := make(map[string]string)
+	for _, row := range records[1:] {
+		found[row[1]] = row[2]
+	}
+	if _, ok := found["vulnerable-plugin"]; !ok {
+		t.Error("Expected 'vulnerable-plugin' in CSV output")
+	}
+	if v, ok := found["clean-plugin"]; !ok {
+		t.Error("Expected 'clean-plugin' in CSV output")
+	} else if v != "3.1.0" {
+		t.Errorf("Expected version '3.1.0' for clean-plugin, got %s", v)
+	}
+}
+
 func TestGetWriter(t *testing.T) {
 	tests := []struct {
 		name       string
