@@ -69,7 +69,8 @@ func TestExtractSlugsFromReader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dest := make(map[string]struct{})
-			err := extractSlugsFromReader(strings.NewReader(tt.html), dest)
+			themes := make(map[string]struct{})
+			err := extractSlugsFromReader(strings.NewReader(tt.html), dest, themes)
 			if err != nil {
 				t.Fatalf("extractSlugsFromReader returned error: %v", err)
 			}

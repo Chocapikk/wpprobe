@@ -128,6 +128,18 @@ type Vulnerability struct {
 	CVSSVector string
 }
 
+// ThemeResult represents a detected theme with its vulnerabilities.
+type ThemeResult struct {
+	// Theme slug/name
+	Name string
+
+	// Detected version
+	Version string
+
+	// Vulnerabilities grouped by severity
+	Vulnerabilities VulnerabilitiesBySeverity
+}
+
 // ScanResult contains the complete scan results.
 type ScanResult struct {
 	// Target URL that was scanned
@@ -135,6 +147,9 @@ type ScanResult struct {
 
 	// Detected plugins
 	Plugins []PluginResult
+
+	// Detected themes
+	Themes []ThemeResult
 
 	// Total number of vulnerabilities found
 	TotalVulnerabilities int
@@ -235,53 +250,34 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 }
 
 // buildResult converts internal file entries to public API results.
-// Only includes vulnerabilities for plugins with known versions (not "unknown" or empty).
-// Deduplicates CVEs by severity level to avoid duplicates.
+// Uses SoftwareType to separate plugins from themes.
+// Deduplicates CVEs using a composite key including type, slug, severity.
 func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanResult {
 	result := &ScanResult{
 		Target:  target,
 		Plugins: make([]PluginResult, 0),
+		Themes:  make([]ThemeResult, 0),
 		Summary: VulnerabilitySummary{},
 	}
 
 	pluginMap := make(map[string]*PluginResult)
-	// Track seen CVEs with flat composite key: "plugin:severity:cve"
+	themeMap := make(map[string]*ThemeResult)
 	seenCVEs := make(map[string]struct{})
 
 	for _, entry := range entries {
-		// Skip vulnerabilities if version is unknown or empty
-		// We can't match CVEs to a specific version without knowing the version
 		if entry.Version == "" || entry.Version == "unknown" {
 			continue
-		}
-
-		plugin, exists := pluginMap[entry.Plugin]
-		if !exists {
-			plugin = &PluginResult{
-				Name:       entry.Plugin,
-				Version:    entry.Version,
-				Confidence: 100.0,
-				Vulnerabilities: VulnerabilitiesBySeverity{
-					Critical: make([]Vulnerability, 0, 4),
-					High:     make([]Vulnerability, 0, 4),
-					Medium:   make([]Vulnerability, 0, 4),
-					Low:      make([]Vulnerability, 0, 4),
-				},
-			}
-			pluginMap[entry.Plugin] = plugin
 		}
 
 		cve := ""
 		if len(entry.CVEs) > 0 {
 			cve = entry.CVEs[0]
 		}
-
-		// Skip if CVE is empty or already seen for this plugin/severity
 		if cve == "" {
 			continue
 		}
 
-		dedupKey := entry.Plugin + ":" + entry.Severity + ":" + strings.ToLower(cve)
+		dedupKey := entry.SoftwareType + ":" + entry.Slug + ":" + entry.Severity + ":" + strings.ToLower(cve)
 		if _, seen := seenCVEs[dedupKey]; seen {
 			continue
 		}
@@ -297,36 +293,76 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 			CVSSVector:      entry.CVSSVector,
 		}
 
-		switch entry.Severity {
-		case "critical":
-			plugin.Vulnerabilities.Critical = append(plugin.Vulnerabilities.Critical, vuln)
-			result.Summary.Critical++
-		case "high":
-			plugin.Vulnerabilities.High = append(plugin.Vulnerabilities.High, vuln)
-			result.Summary.High++
-		case "medium":
-			plugin.Vulnerabilities.Medium = append(plugin.Vulnerabilities.Medium, vuln)
-			result.Summary.Medium++
-		case "low":
-			plugin.Vulnerabilities.Low = append(plugin.Vulnerabilities.Low, vuln)
-			result.Summary.Low++
+		if entry.SoftwareType == "theme" {
+			theme, exists := themeMap[entry.Slug]
+			if !exists {
+				theme = &ThemeResult{
+					Name:    entry.Slug,
+					Version: entry.Version,
+					Vulnerabilities: VulnerabilitiesBySeverity{
+						Critical: make([]Vulnerability, 0, 4),
+						High:     make([]Vulnerability, 0, 4),
+						Medium:   make([]Vulnerability, 0, 4),
+						Low:      make([]Vulnerability, 0, 4),
+					},
+				}
+				themeMap[entry.Slug] = theme
+			}
+			appendVuln(&theme.Vulnerabilities, vuln, &result.Summary)
+		} else {
+			plugin, exists := pluginMap[entry.Slug]
+			if !exists {
+				plugin = &PluginResult{
+					Name:       entry.Slug,
+					Version:    entry.Version,
+					Confidence: 100.0,
+					Vulnerabilities: VulnerabilitiesBySeverity{
+						Critical: make([]Vulnerability, 0, 4),
+						High:     make([]Vulnerability, 0, 4),
+						Medium:   make([]Vulnerability, 0, 4),
+						Low:      make([]Vulnerability, 0, 4),
+					},
+				}
+				pluginMap[entry.Slug] = plugin
+			}
+			appendVuln(&plugin.Vulnerabilities, vuln, &result.Summary)
 		}
 	}
 
-	// Only include plugins that have at least one vulnerability
-	for _, plugin := range pluginMap {
-		hasVulns := len(plugin.Vulnerabilities.Critical) > 0 ||
-			len(plugin.Vulnerabilities.High) > 0 ||
-			len(plugin.Vulnerabilities.Medium) > 0 ||
-			len(plugin.Vulnerabilities.Low) > 0
-		if hasVulns {
-			result.Plugins = append(result.Plugins, *plugin)
+	for _, p := range pluginMap {
+		if hasVulnerabilities(&p.Vulnerabilities) {
+			result.Plugins = append(result.Plugins, *p)
+		}
+	}
+	for _, t := range themeMap {
+		if hasVulnerabilities(&t.Vulnerabilities) {
+			result.Themes = append(result.Themes, *t)
 		}
 	}
 
 	result.TotalVulnerabilities = result.Summary.Critical + result.Summary.High + result.Summary.Medium + result.Summary.Low
-
 	return result
+}
+
+func appendVuln(vulns *VulnerabilitiesBySeverity, vuln Vulnerability, summary *VulnerabilitySummary) {
+	switch vuln.Severity {
+	case "critical":
+		vulns.Critical = append(vulns.Critical, vuln)
+		summary.Critical++
+	case "high":
+		vulns.High = append(vulns.High, vuln)
+		summary.High++
+	case "medium":
+		vulns.Medium = append(vulns.Medium, vuln)
+		summary.Medium++
+	case "low":
+		vulns.Low = append(vulns.Low, vuln)
+		summary.Low++
+	}
+}
+
+func hasVulnerabilities(v *VulnerabilitiesBySeverity) bool {
+	return len(v.Critical) > 0 || len(v.High) > 0 || len(v.Medium) > 0 || len(v.Low) > 0
 }
 
 // UpdateDatabases updates both Wordfence and WPScan vulnerability databases.

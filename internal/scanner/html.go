@@ -49,53 +49,56 @@ func isValidSlug(s string) bool {
 	return true
 }
 
-func discoverPluginsFromHTML(ctx context.Context, target string, cfg http.Config) ([]string, error) {
+// HTMLDiscoveryResult holds both plugins and themes discovered from HTML.
+type HTMLDiscoveryResult struct {
+	Plugins []string
+	Themes  []string
+}
+
+func discoverFromHTML(ctx context.Context, target string, cfg http.Config) (HTMLDiscoveryResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return HTMLDiscoveryResult{}, ctx.Err()
 	default:
 	}
 
 	normalized := http.NormalizeURL(target)
 	client := cfg.NewClient(5 * time.Second)
 
-	slugsSet := make(map[string]struct{})
+	pluginsSet := make(map[string]struct{})
+	themesSet := make(map[string]struct{})
 
-	if body, err := client.GetWithContext(ctx, normalized+"/"); err == nil {
-		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
+	pages := []string{"/", "/feed/", "/wp-content/uploads/"}
+	for _, page := range pages {
+		select {
+		case <-ctx.Done():
+			return HTMLDiscoveryResult{}, ctx.Err()
+		default:
+		}
+		if body, err := client.GetWithContext(ctx, normalized+page); err == nil {
+			_ = extractSlugsFromReader(strings.NewReader(body), pluginsSet, themesSet)
+		}
 	}
 
-	// Check context between requests
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
+	plugins := make([]string, 0, len(pluginsSet))
+	for slug := range pluginsSet {
+		plugins = append(plugins, slug)
 	}
+	themes := make([]string, 0, len(themesSet))
+	for slug := range themesSet {
+		themes = append(themes, slug)
+	}
+	return HTMLDiscoveryResult{Plugins: plugins, Themes: themes}, nil
+}
 
-	if body, err := client.GetWithContext(ctx, normalized+"/feed/"); err == nil {
-		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
-	}
-
-	// Check context between requests
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	if body, err := client.GetWithContext(ctx, normalized+"/wp-content/uploads/"); err == nil {
-		_ = extractSlugsFromReader(strings.NewReader(body), slugsSet)
-	}
-
-	slugs := make([]string, 0, len(slugsSet))
-	for slug := range slugsSet {
-		slugs = append(slugs, slug)
-	}
-	return slugs, nil
+// discoverPluginsFromHTML is a compatibility wrapper that returns only plugins.
+func discoverPluginsFromHTML(ctx context.Context, target string, cfg http.Config) ([]string, error) {
+	result, err := discoverFromHTML(ctx, target, cfg)
+	return result.Plugins, err
 }
 
 // extractSlugFromPath finds prefix (e.g. "wp-content/plugins/") in val and extracts the slug after it.
@@ -123,7 +126,7 @@ func extractSlugFromPath(val, prefix string, dest map[string]struct{}) {
 	}
 }
 
-func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
+func extractSlugsFromReader(r io.Reader, pluginDest, themeDest map[string]struct{}) error {
 	z := html.NewTokenizer(r)
 	for {
 		tt := z.Next()
@@ -140,9 +143,9 @@ func extractSlugsFromReader(r io.Reader, dest map[string]struct{}) error {
 		tok := z.Token()
 		for _, attr := range tok.Attr {
 			val := attr.Val
-			// Use index-based search to avoid strings.Split allocation
-			extractSlugFromPath(val, "wp-content/plugins/", dest)
-			extractSlugFromPath(val, "wp-content/uploads/", dest)
+			extractSlugFromPath(val, "wp-content/plugins/", pluginDest)
+			extractSlugFromPath(val, "wp-content/uploads/", pluginDest)
+			extractSlugFromPath(val, "wp-content/themes/", themeDest)
 		}
 	}
 }

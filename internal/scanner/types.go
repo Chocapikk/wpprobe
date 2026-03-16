@@ -152,6 +152,7 @@ type BruteforceContext struct {
 // VulnerabilityCheckRequest contains request parameters for checking vulnerabilities.
 type VulnerabilityCheckRequest struct {
 	Plugins  []string
+	Themes   []string
 	Target   string
 	Vulns    []wordfence.Vulnerability
 	Opts     ScanOptions

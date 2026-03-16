@@ -31,9 +31,9 @@ import (
 
 func Test_buildPluginVulns(t *testing.T) {
 	entries := []file.PluginEntry{
-		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}},
-		{Plugin: "plugin1", Severity: "high", CVEs: []string{"CVE-2"}},
-		{Plugin: "plugin2", Severity: "medium", CVEs: []string{"CVE-3"}},
+		{Slug: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}},
+		{Slug: "plugin1", Severity: "high", CVEs: []string{"CVE-2"}},
+		{Slug: "plugin2", Severity: "medium", CVEs: []string{"CVE-3"}},
 	}
 	got := buildPluginVulns(entries).Plugins
 	want := map[string]scanner.VulnCategories{
@@ -52,9 +52,9 @@ func Test_buildPluginVulns(t *testing.T) {
 
 func Test_buildPluginAuthGroups(t *testing.T) {
 	entries := []file.PluginEntry{
-		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}, AuthType: "Unauth"},
-		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-2"}, AuthType: "Auth"},
-		{Plugin: "plugin1", Severity: "high", CVEs: []string{"CVE-3"}, AuthType: "Unknown"},
+		{Slug: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}, AuthType: "Unauth"},
+		{Slug: "plugin1", Severity: "critical", CVEs: []string{"CVE-2"}, AuthType: "Auth"},
+		{Slug: "plugin1", Severity: "high", CVEs: []string{"CVE-3"}, AuthType: "Unknown"},
 	}
 	got := buildPluginAuthGroups(entries).Plugins
 	want := map[string]scanner.SeverityAuthGroup{

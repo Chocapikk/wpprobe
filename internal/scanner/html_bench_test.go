@@ -94,7 +94,8 @@ func BenchmarkExtractSlugsFromReader_Small(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dest := make(map[string]struct{})
-		_ = extractSlugsFromReader(strings.NewReader(html), dest)
+		themes := make(map[string]struct{})
+		_ = extractSlugsFromReader(strings.NewReader(html), dest, themes)
 	}
 }
 
@@ -105,7 +106,8 @@ func BenchmarkExtractSlugsFromReader_Medium(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dest := make(map[string]struct{})
-		_ = extractSlugsFromReader(strings.NewReader(html), dest)
+		themes := make(map[string]struct{})
+		_ = extractSlugsFromReader(strings.NewReader(html), dest, themes)
 	}
 }
 
@@ -116,7 +118,8 @@ func BenchmarkExtractSlugsFromReader_Large(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dest := make(map[string]struct{})
-		_ = extractSlugsFromReader(strings.NewReader(html), dest)
+		themes := make(map[string]struct{})
+		_ = extractSlugsFromReader(strings.NewReader(html), dest, themes)
 	}
 }
 
@@ -156,7 +159,8 @@ func BenchmarkExtractSlugsFromReader_RealWorldPage(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dest := make(map[string]struct{})
-		_ = extractSlugsFromReader(strings.NewReader(html), dest)
+		themes := make(map[string]struct{})
+		_ = extractSlugsFromReader(strings.NewReader(html), dest, themes)
 	}
 }
 
@@ -173,6 +177,7 @@ func BenchmarkExtractSlugsFromReader_NoPlugins(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dest := make(map[string]struct{})
-		_ = extractSlugsFromReader(strings.NewReader(html), dest)
+		themes := make(map[string]struct{})
+		_ = extractSlugsFromReader(strings.NewReader(html), dest, themes)
 	}
 }

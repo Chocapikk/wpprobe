@@ -35,6 +35,7 @@ import (
 var tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
 
 var versionRegex = regexp.MustCompile(`(?:Stable tag|Version):\s*([0-9A-Za-z.\-]+)`)
+var themeVersionRegex = regexp.MustCompile(`(?i)Version:\s*([0-9A-Za-z.\-]+)`)
 
 var readmeNames = []string{"readme.txt", "Readme.txt", "README.txt"}
 
@@ -118,6 +119,29 @@ func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager,
 		} else if ctx.Err() != nil {
 			return "unknown"
 		}
+	}
+	return "unknown"
+}
+
+// GetThemeVersionWithContext fetches the theme version from style.css.
+func GetThemeVersionWithContext(ctx context.Context, target, theme string, cfg http.Config) string {
+	httpClient := cfg.NewClient(10 * time.Second)
+	select {
+	case <-ctx.Done():
+		return "unknown"
+	default:
+	}
+	url := target + "/wp-content/themes/" + theme + "/style.css"
+	body, err := httpClient.GetWithContext(ctx, url)
+	if err != nil {
+		return "unknown"
+	}
+	// Only parse the header part (first 8KB is enough for CSS headers)
+	if len(body) > 8192 {
+		body = body[:8192]
+	}
+	if m := themeVersionRegex.FindStringSubmatch(body); len(m) > 1 {
+		return strings.TrimSpace(m[1])
 	}
 	return "unknown"
 }

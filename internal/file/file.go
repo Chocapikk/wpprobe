@@ -197,7 +197,7 @@ func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 	for _, entry := range results {
 		row := []string{
 			url,
-			entry.Plugin,
+			entry.Slug,
 			entry.Version,
 			entry.Severity,
 			entry.AuthType,
@@ -245,7 +245,7 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	pluginResultsMap := make(map[string]*PluginResult)
 
 	for _, entry := range results {
-		pluginName := entry.Plugin
+		pluginName := entry.Slug
 		version := entry.Version
 		severity := entry.Severity
 		auth := strings.ToLower(entry.AuthType)

@@ -30,10 +30,11 @@ type WriterInterface interface {
 	Close()
 }
 
-// PluginEntry represents a plugin entry with its vulnerabilities.
+// PluginEntry represents a plugin or theme entry with its vulnerabilities.
 type PluginEntry struct {
-	Plugin     string   `json:"plugin"`
-	Version    string   `json:"version"`
+	Slug         string   `json:"slug"`
+	SoftwareType string   `json:"software_type,omitempty"` // "plugin" or "theme"
+	Version      string   `json:"version"`
 	Severity   string   `json:"severity"`
 	CVEs       []string `json:"cves"`
 	CVELinks   []string `json:"cve_link"`

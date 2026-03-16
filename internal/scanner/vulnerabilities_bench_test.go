@@ -76,7 +76,7 @@ func BenchmarkFindMatchingVulnerabilities_Hit(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = findMatchingVulnerabilities("plugin-50", "1.5.0", index)
+		_ = findMatchingVulnerabilities("plugin", "plugin-50", "1.5.0", index)
 	}
 }
 
@@ -87,7 +87,7 @@ func BenchmarkFindMatchingVulnerabilities_Miss(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = findMatchingVulnerabilities("nonexistent-plugin", "1.5.0", index)
+		_ = findMatchingVulnerabilities("plugin", "nonexistent-plugin", "1.5.0", index)
 	}
 }
 
@@ -98,7 +98,7 @@ func BenchmarkFindMatchingVulnerabilities_UnknownVersion(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = findMatchingVulnerabilities("plugin-50", "unknown", index)
+		_ = findMatchingVulnerabilities("plugin", "plugin-50", "unknown", index)
 	}
 }
 

@@ -130,14 +130,13 @@ func ScanSite(ctx ScanSiteContext) {
 		Ctx:      scanCtx,
 	}
 
-	detected, result, versions := performScan(execCtx, scanMode)
+	scanResult := performScan(execCtx, scanMode)
 
-	if len(detected) == 0 {
+	if len(scanResult.Plugins) == 0 && len(scanResult.Themes) == 0 {
 		handleNoPluginsDetected(ctx)
 		return
 	}
 
-	// Check context before vulnerability check
 	select {
 	case <-scanCtx.Done():
 		return
@@ -145,12 +144,13 @@ func ScanSite(ctx ScanSiteContext) {
 	}
 
 	vulnReq := VulnerabilityCheckRequest{
-		Plugins:  result.Detected,
+		Plugins:  scanResult.Plugins,
+		Themes:   scanResult.Themes,
 		Target:   ctx.Target,
 		Vulns:    ctx.Vulns,
 		Opts:     ctx.Opts,
 		Progress: ctx.Progress,
-		Versions: versions,
+		Versions: scanResult.Versions,
 		Ctx:      scanCtx,
 	}
 	entriesMap, entriesList := CheckVulnerabilities(vulnReq)
@@ -163,7 +163,7 @@ func ScanSite(ctx ScanSiteContext) {
 		displayCtx := DisplayResultsContext{
 			Target:    ctx.Target,
 			Detected:  entriesMap,
-			PluginRes: result,
+			PluginRes: scanResult.PluginResult,
 			Results:   entriesList,
 			Opts:      ctx.Opts,
 			Progress:  ctx.Progress,

@@ -46,7 +46,7 @@ func buildPluginVulns(resultsList []file.PluginEntry) scanner.PluginVulnerabilit
 	pluginVulns := scanner.PluginVulnerabilities{Plugins: make(map[string]scanner.VulnCategories, len(resultsList))}
 	for _, entry := range resultsList {
 		sevNormalized := severity.Normalize(entry.Severity)
-		cat := pluginVulns.Plugins[entry.Plugin]
+		cat := pluginVulns.Plugins[entry.Slug]
 		if len(entry.CVEs) > 0 {
 			switch sevNormalized {
 			case "critical":
@@ -59,7 +59,7 @@ func buildPluginVulns(resultsList []file.PluginEntry) scanner.PluginVulnerabilit
 				cat.Low = append(cat.Low, entry.CVEs[0])
 			}
 		}
-		pluginVulns.Plugins[entry.Plugin] = cat
+		pluginVulns.Plugins[entry.Slug] = cat
 	}
 	return pluginVulns
 }
@@ -70,10 +70,10 @@ func buildPluginAuthGroups(resultsList []file.PluginEntry) scanner.PluginAuthGro
 	for _, entry := range resultsList {
 		sevLabel := severity.FormatTitleCase(entry.Severity)
 
-		pag, ok := pluginAuthGroups.Plugins[entry.Plugin]
+		pag, ok := pluginAuthGroups.Plugins[entry.Slug]
 		if !ok {
 			pag = scanner.SeverityAuthGroup{Severities: make(map[string]scanner.AuthGroup, 4)}
-			pluginAuthGroups.Plugins[entry.Plugin] = pag
+			pluginAuthGroups.Plugins[entry.Slug] = pag
 		}
 
 		ag, ok := pag.Severities[sevLabel]

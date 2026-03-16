@@ -32,11 +32,18 @@ func getScanMode(mode string) string {
 	return mode
 }
 
-func performScan(ctx ScanExecutionContext, scanMode string) ([]string, PluginDetectionResult, map[string]string) {
+// ScanDetectionResult holds the combined results of plugin and theme detection.
+type ScanDetectionResult struct {
+	Plugins      []string
+	Themes       []string
+	PluginResult PluginDetectionResult
+	Versions     map[string]string
+}
+
+func performScan(ctx ScanExecutionContext, scanMode string) ScanDetectionResult {
 	switch scanMode {
 	case "stealthy":
-		detected, result := performStealthyScan(ctx)
-		return detected, result, nil
+		return performStealthyScan(ctx)
 	case "bruteforce":
 		return performBruteforceScan(ctx)
 	case "hybrid":
@@ -45,38 +52,34 @@ func performScan(ctx ScanExecutionContext, scanMode string) ([]string, PluginDet
 		logger.DefaultLogger.Warning(
 			"Unknown scan mode '" + ctx.Opts.ScanMode + "', defaulting to stealthy",
 		)
-		detected, result := performStealthyScan(ctx)
-		return detected, result, nil
+		return performStealthyScan(ctx)
 	}
 }
 
-func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionResult) {
-	// Check context before starting
+func performStealthyScan(ctx ScanExecutionContext) ScanDetectionResult {
 	if ctx.Ctx != nil {
 		select {
 		case <-ctx.Ctx.Done():
-			return nil, PluginDetectionResult{}
+			return ScanDetectionResult{}
 		default:
 		}
 	}
 
-	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "Discovering plugins from HTML...")
+	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "Discovering plugins and themes from HTML...")
 
 	httpCfg := HTTPConfigFromOpts(ctx.Opts)
-	htmlSlugs, err := discoverPluginsFromHTML(ctx.Ctx, ctx.Target, httpCfg)
+	htmlResult, err := discoverFromHTML(ctx.Ctx, ctx.Target, httpCfg)
 	if err != nil {
-		// If context was cancelled, return early
 		if ctx.Ctx != nil && ctx.Ctx.Err() != nil {
-			return nil, PluginDetectionResult{}
+			return ScanDetectionResult{}
 		}
 		logger.DefaultLogger.Warning(fmt.Sprintf("HTML discovery failed on %s: %v", ctx.Target, err))
 	}
 
-	// Check context between steps
 	if ctx.Ctx != nil {
 		select {
 		case <-ctx.Ctx.Done():
-			return nil, PluginDetectionResult{}
+			return ScanDetectionResult{}
 		default:
 		}
 	}
@@ -85,24 +88,24 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 
 	endpointsData, err := loadEndpointsData()
 	if err != nil {
-		return nil, PluginDetectionResult{}
+		return ScanDetectionResult{Themes: htmlResult.Themes}
 	}
 
 	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, httpCfg)
+	pluginResult := buildDetectionResult(endpoints, endpointsData, htmlResult.Plugins)
 
-	result := buildDetectionResult(endpoints, endpointsData, htmlSlugs)
-
-	if len(result.Detected) == 0 {
-		return nil, result
+	return ScanDetectionResult{
+		Plugins:      pluginResult.Detected,
+		Themes:       htmlResult.Themes,
+		PluginResult: pluginResult,
 	}
-	return result.Detected, result
 }
 
-func performBruteforceScan(ctx ScanExecutionContext) ([]string, PluginDetectionResult, map[string]string) {
+func performBruteforceScan(ctx ScanExecutionContext) ScanDetectionResult {
 	plugins, err := LoadPluginsFromFile(ctx.Opts.PluginList)
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
-		return nil, PluginDetectionResult{}, nil
+		return ScanDetectionResult{}
 	}
 
 	progress := setupBruteforceProgress(ctx.Opts, ctx.Progress, len(plugins))
@@ -118,29 +121,34 @@ func performBruteforceScan(ctx ScanExecutionContext) ([]string, PluginDetectionR
 	detected, versions := BruteforcePlugins(bruteReq)
 
 	detectedList, result := buildBruteforceResult(detected, versions)
-	return detectedList, result, versions
+	return ScanDetectionResult{Plugins: detectedList, PluginResult: result, Versions: versions}
 }
 
-func performHybridScan(ctx ScanExecutionContext) ([]string, PluginDetectionResult, map[string]string) {
+func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 	logger.DefaultLogger.Info("Starting hybrid scan: first stealthy, then brute-force...")
 
-	stealthyList, stealthyRes := performStealthyScan(ctx)
+	stealthyResult := performStealthyScan(ctx)
 
-	if len(stealthyList) == 0 {
+	if len(stealthyResult.Plugins) == 0 {
 		return performBruteforceScan(ctx)
 	}
 
 	finishProgressIfNeeded(ctx.Progress)
 
-	remaining := calculateRemainingPlugins(stealthyList, ctx.Opts)
+	remaining := calculateRemainingPlugins(stealthyResult.Plugins, ctx.Opts)
 	if len(remaining) == 0 {
-		return stealthyList, stealthyRes, nil
+		return stealthyResult
 	}
 
 	brutefound, versions := performBruteforceOnRemaining(ctx, remaining)
 
-	detected, result := combineHybridResults(stealthyList, stealthyRes, brutefound)
-	return detected, result, versions
+	detected, result := combineHybridResults(stealthyResult.Plugins, stealthyResult.PluginResult, brutefound)
+	return ScanDetectionResult{
+		Plugins:      detected,
+		Themes:       stealthyResult.Themes,
+		PluginResult: result,
+		Versions:     versions,
+	}
 }
 
 func performBruteforceOnRemaining(ctx ScanExecutionContext, remaining []string) ([]string, map[string]string) {

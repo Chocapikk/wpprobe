@@ -28,21 +28,21 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 )
 
-// CheckVulnerabilities checks vulnerabilities for detected plugins and returns entries.
+// CheckVulnerabilities checks vulnerabilities for detected plugins and themes.
 func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []file.PluginEntry) {
-	entriesMap := make(map[string]string, len(req.Plugins))
-	entriesList := make([]file.PluginEntry, 0, len(req.Plugins))
+	totalItems := len(req.Plugins) + len(req.Themes)
+	entriesMap := make(map[string]string, totalItems)
+	entriesList := make([]file.PluginEntry, 0, totalItems)
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, req.Opts.Threads)
 
 	if req.Progress != nil && req.Opts.File == "" {
-		req.Progress.SetTotal(len(req.Plugins))
+		req.Progress.SetTotal(totalItems)
 		req.Progress.SetMessage("🔎 Checking versions & vulnerabilities...")
 	}
 
-	// Index vulnerabilities by slug for O(1) lookup instead of O(n) linear search
 	vulnIndex := getOrBuildVulnerabilityIndex(req.Vulns)
 
 	checkCtx := VulnerabilityCheckContext{
@@ -68,18 +68,31 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 		scanCtx = context.Background()
 	}
 
-pluginLoop:
-	for _, plugin := range req.Plugins {
+	// Check plugins
+	for _, slug := range req.Plugins {
 		wg.Add(1)
 		select {
 		case sem <- struct{}{}:
-			go checkPluginVulnerabilities(plugin, req.Opts, checkCtx)
+			go checkSoftwareVulnerabilities(slug, "plugin", req.Opts, checkCtx)
 		case <-scanCtx.Done():
 			wg.Done()
-			break pluginLoop
+			goto done
 		}
 	}
 
+	// Check themes
+	for _, slug := range req.Themes {
+		wg.Add(1)
+		select {
+		case sem <- struct{}{}:
+			go checkSoftwareVulnerabilities(slug, "theme", req.Opts, checkCtx)
+		case <-scanCtx.Done():
+			wg.Done()
+			goto done
+		}
+	}
+
+done:
 	wg.Wait()
 	return entriesMap, entriesList
 }
@@ -96,7 +109,6 @@ func getOrBuildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]
 	cachedVulnMu.Lock()
 	defer cachedVulnMu.Unlock()
 
-	// If same underlying array as cached, return cached index
 	if len(vulns) > 0 && len(cachedVulnSlice) > 0 && &vulns[0] == &cachedVulnSlice[0] {
 		return cachedVulnIndex
 	}
@@ -106,48 +118,57 @@ func getOrBuildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]
 	return cachedVulnIndex
 }
 
-// buildVulnerabilityIndex creates a map of vulnerability pointers indexed by plugin slug for fast lookup.
+// vulnIndexKey builds a composite key "type:slug" to prevent collisions
+// between plugins and themes that share the same slug.
+func vulnIndexKey(softwareType, slug string) string {
+	if softwareType == "" {
+		softwareType = "plugin"
+	}
+	return softwareType + ":" + slug
+}
+
+// buildVulnerabilityIndex creates a map indexed by "type:slug" for fast lookup.
 func buildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]*wordfence.Vulnerability {
 	index := make(map[string][]*wordfence.Vulnerability)
 	for i := range vulns {
 		if vulns[i].Slug != "" {
-			index[vulns[i].Slug] = append(index[vulns[i].Slug], &vulns[i])
+			key := vulnIndexKey(vulns[i].SoftwareType, vulns[i].Slug)
+			index[key] = append(index[key], &vulns[i])
 		}
 	}
 	return index
 }
 
-func checkPluginVulnerabilities(
-	plugin string,
+func checkSoftwareVulnerabilities(
+	slug string,
+	softwareType string,
 	opts ScanOptions,
 	ctx VulnerabilityCheckContext,
 ) {
 	defer ctx.Wg.Done()
 	defer releaseSemaphore(ctx.Sem)
-	defer recoverPanic("plugin " + plugin)
+	defer recoverPanic(softwareType + " " + slug)
 
-	version := getPluginVersion(plugin, opts, ctx, ctx.PreDetectedVersions)
-	matched := findMatchingVulnerabilities(plugin, version, ctx.VulnIndex)
-	local := buildPluginEntries(plugin, version, matched)
+	version := getSoftwareVersion(slug, softwareType, opts, ctx)
+	matched := findMatchingVulnerabilities(softwareType, slug, version, ctx.VulnIndex)
+	local := buildSoftwareEntries(slug, softwareType, version, matched)
 
-	// Prepare data before locking to minimize mutex hold time
 	ctx.Mu.Lock()
-	(*ctx.EntriesMap)[plugin] = version
+	(*ctx.EntriesMap)[slug] = version
 	*ctx.EntriesList = append(*ctx.EntriesList, local...)
 	ctx.Mu.Unlock()
 
-	// Update progress outside of mutex lock
 	if opts.File == "" {
 		incrementProgress(ctx.Progress)
 	}
 }
 
-func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckContext, preDetectedVersions map[string]string) string {
+func getSoftwareVersion(slug, softwareType string, opts ScanOptions, ctx VulnerabilityCheckContext) string {
 	if opts.NoCheckVersion {
 		return "unknown"
 	}
-	if preDetectedVersions != nil {
-		if version, exists := preDetectedVersions[plugin]; exists {
+	if ctx.PreDetectedVersions != nil {
+		if version, exists := ctx.PreDetectedVersions[slug]; exists {
 			return version
 		}
 	}
@@ -159,21 +180,26 @@ func getPluginVersion(plugin string, opts ScanOptions, ctx VulnerabilityCheckCon
 	if scanCtx == nil {
 		scanCtx = context.Background()
 	}
-	return versionpkg.GetPluginVersionWithContext(scanCtx, ctx.Target, plugin, cfg)
+	if softwareType == "theme" {
+		return versionpkg.GetThemeVersionWithContext(scanCtx, ctx.Target, slug, cfg)
+	}
+	return versionpkg.GetPluginVersionWithContext(scanCtx, ctx.Target, slug, cfg)
 }
 
 func findMatchingVulnerabilities(
-	plugin string,
+	softwareType string,
+	slug string,
 	version string,
 	vulnIndex map[string][]*wordfence.Vulnerability,
 ) []*wordfence.Vulnerability {
-	pluginVulns, exists := vulnIndex[plugin]
+	key := vulnIndexKey(softwareType, slug)
+	vulns, exists := vulnIndex[key]
 	if !exists || version == "" || version == "unknown" {
 		return nil
 	}
 
-	matched := make([]*wordfence.Vulnerability, 0, len(pluginVulns))
-	for _, v := range pluginVulns {
+	matched := make([]*wordfence.Vulnerability, 0, len(vulns))
+	for _, v := range vulns {
 		if versionpkg.IsVersionVulnerable(version, v.FromVersion, v.ToVersion) {
 			matched = append(matched, v)
 		}
@@ -181,13 +207,14 @@ func findMatchingVulnerabilities(
 	return matched
 }
 
-func buildPluginEntries(
-	plugin string,
+func buildSoftwareEntries(
+	slug string,
+	softwareType string,
 	version string,
 	matched []*wordfence.Vulnerability,
 ) []file.PluginEntry {
 	if len(matched) == 0 {
-		return []file.PluginEntry{createEmptyPluginEntry(plugin, version)}
+		return []file.PluginEntry{createSoftwareEntry(slug, softwareType, version, nil)}
 	}
 
 	seenCVEs := make(map[string]struct{}, len(matched))
@@ -205,41 +232,38 @@ func buildPluginEntries(
 			continue
 		}
 		seenCVEs[cve] = struct{}{}
-		entries = append(entries, createVulnerablePluginEntry(plugin, version, v))
+		entries = append(entries, createSoftwareEntry(slug, softwareType, version, v))
 	}
 
 	if len(entries) == 0 {
-		return []file.PluginEntry{createEmptyPluginEntry(plugin, version)}
+		return []file.PluginEntry{createSoftwareEntry(slug, softwareType, version, nil)}
 	}
 
 	return entries
 }
 
-func createEmptyPluginEntry(plugin, version string) file.PluginEntry {
+// createSoftwareEntry builds a PluginEntry. If vuln is nil, creates an empty entry.
+func createSoftwareEntry(slug, softwareType, version string, vuln *wordfence.Vulnerability) file.PluginEntry {
+	if vuln == nil {
+		return file.PluginEntry{
+			Slug:       slug,
+			SoftwareType: softwareType,
+			Version:      version,
+			CVEs:         []string{},
+			Severity:     "none",
+			AuthType:     "n/a",
+		}
+	}
 	return file.PluginEntry{
-		Plugin:   plugin,
-		Version:  version,
-		CVEs:     []string{},
-		Severity: "none",
-		AuthType: "n/a",
+		Slug:       slug,
+		SoftwareType: softwareType,
+		Version:      version,
+		CVEs:         []string{vuln.CVE},
+		CVELinks:     []string{vuln.CVELink},
+		Severity:     vuln.Severity,
+		AuthType:     vuln.AuthType,
+		Title:        vuln.Title,
+		CVSSScore:    vuln.CVSSScore,
+		CVSSVector:   vuln.CVSSVector,
 	}
 }
-
-func createVulnerablePluginEntry(
-	plugin string,
-	version string,
-	v *wordfence.Vulnerability,
-) file.PluginEntry {
-	return file.PluginEntry{
-		Plugin:     plugin,
-		Version:    version,
-		CVEs:       []string{v.CVE},
-		CVELinks:   []string{v.CVELink},
-		Severity:   v.Severity,
-		AuthType:   v.AuthType,
-		Title:      v.Title,
-		CVSSScore:  v.CVSSScore,
-		CVSSVector: v.CVSSVector,
-	}
-}
-
