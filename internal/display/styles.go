@@ -17,7 +17,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package scanner
+package display
 
 import (
 	"github.com/charmbracelet/lipgloss"
@@ -46,7 +46,7 @@ var (
 	unknownStyle    = bold.Foreground(lipgloss.Color("#FFA500"))
 )
 
-// Exported styles for use in other packages.
+// Exported styles for use in other packages (list, search).
 var (
 	TitleStyle     = titleStyle
 	URLStyle       = urlStyle
@@ -63,4 +63,3 @@ var (
 	AuthStyle       = authStyle
 	PrivilegedStyle = privilegedStyle
 )
-

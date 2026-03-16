@@ -23,7 +23,6 @@ import (
 	"fmt"
 
 	"github.com/Chocapikk/wpprobe/internal/logger"
-	"github.com/Chocapikk/wpprobe/internal/progress"
 )
 
 // releaseSemaphore releases a semaphore slot.
@@ -41,7 +40,7 @@ func recoverPanic(label string) {
 }
 
 // incrementProgress increments the progress bar if non-nil.
-func incrementProgress(p *progress.ProgressManager) {
+func incrementProgress(p Progress) {
 	if p != nil {
 		p.Increment()
 	}

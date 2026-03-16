@@ -23,20 +23,26 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	infoStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#00AEEF"))
-	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFCC00"))
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5733"))
-	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#33CC33"))
-	timeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
-
-	DefaultLogger = NewLogger()
+const (
+	ansiReset   = "\033[0m"
+	ansiInfo    = "\033[38;5;39m"
+	ansiWarning = "\033[38;5;220m"
+	ansiError   = "\033[38;5;196m"
+	ansiSuccess = "\033[32m"
+	ansiGray    = "\033[38;5;245m"
+	ansiBold    = "\033[1m"
+	ansiCyan    = "\033[36m"
 )
+
+var DefaultLogger = NewLogger()
+
+func colorize(color, text string) string {
+	return color + text + ansiReset
+}
 
 type Logger struct {
 	Logger  *log.Logger
@@ -58,26 +64,26 @@ func NewLoggerWithVerbose(verbose bool) *Logger {
 }
 
 func formatTime() string {
-	return timeStyle.Render(time.Now().Format("15:04:05"))
+	return colorize(ansiGray, time.Now().Format("15:04:05"))
 }
 
 func (l *Logger) Info(msg string) {
 	if !l.Verbose {
 		return
 	}
-	l.Logger.Println(formatTime() + " [" + infoStyle.Render("INFO") + "] " + msg)
+	l.Logger.Println(formatTime() + " [" + colorize(ansiInfo, "INFO") + "] " + msg)
 }
 
 func (l *Logger) Warning(msg string) {
 	if !l.Verbose {
 		return
 	}
-	l.Logger.Println(formatTime() + " [" + warningStyle.Render("WARNING") + "] " + msg)
+	l.Logger.Println(formatTime() + " [" + colorize(ansiWarning, "WARNING") + "] " + msg)
 }
 
 func (l *Logger) Error(msg string) {
 	// Errors are always shown, even when not verbose
-	l.Logger.Println(formatTime() + " [" + errorStyle.Render("ERROR") + "] " + msg)
+	l.Logger.Println(formatTime() + " [" + colorize(ansiError, "ERROR") + "] " + msg)
 }
 
 func (l *Logger) Success(msg string) {
@@ -89,41 +95,34 @@ func (l *Logger) Success(msg string) {
 
 // FormatSuccess returns a formatted success message string without printing it.
 func FormatSuccess(msg string) string {
-	return formatTime() + " [" + successStyle.Render("SUCCESS") + "] " + msg
+	return formatTime() + " [" + colorize(ansiSuccess, "SUCCESS") + "] " + msg
 }
 
 func (l *Logger) PrintBanner(version string, isLatest bool) {
-	latestStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#33CC33"))
-	outdatedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5733"))
-	versionStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00AEEF"))
-	textStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#AAAAAA"))
-
-	status := outdatedStyle.Render("outdated")
+	status := colorize(ansiError+ansiBold, "outdated")
 	if isLatest {
-		status = latestStyle.Render("latest")
+		status = colorize(ansiSuccess+ansiBold, "latest")
 	}
 
 	logo := `
- __    __  ___  ___           _          
-/ / /\ \ \/ _ \/ _ \_ __ ___ | |__   ___ 
+ __    __  ___  ___           _
+/ / /\ \ \/ _ \/ _ \_ __ ___ | |__   ___
 \ \/  \/ / /_)/ /_)/ '__/ _ \| '_ \ / _ \
  \  /\  / ___/ ___/| | | (_) | |_) |  __/
   \/  \/\/   \/    |_|  \___/|_.__/ \___|`
 
-	versionText := versionStyle.Render(version)
+	versionText := colorize(ansiCyan+ansiBold, version)
 	statusText := "[" + status + "]"
 
-	logoLines := lipgloss.NewStyle().Render(logo)
-	versionLine := lipgloss.Place(
-		50,
-		1,
-		lipgloss.Right,
-		lipgloss.Bottom,
-		versionText+" "+statusText,
-	)
+	versionLine := versionText + " " + statusText
+	// Right-pad to ~50 chars
+	pad := 50 - len(version) - 3 // rough estimate
+	if pad > 0 {
+		versionLine = strings.Repeat(" ", pad) + versionLine
+	}
 
-	fmt.Println(logoLines + "\n" + versionLine + "\n")
-	fmt.Println(textStyle.Render("Stealthy WordPress Plugin Scanner - By @Chocapikk\n"))
+	fmt.Println(logo + "\n" + versionLine + "\n")
+	fmt.Println(colorize(ansiGray+ansiBold, "Stealthy WordPress Plugin Scanner - By @Chocapikk\n"))
 
 	if !isLatest && l.Verbose {
 		l.Warning("Your current WPProbe version is outdated. Latest version available.")

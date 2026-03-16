@@ -17,7 +17,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package scanner
+package display
 
 import (
 	"fmt"
@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/Chocapikk/wpprobe/internal/severity"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
@@ -33,16 +34,16 @@ import (
 var vulnTypeOrder = []string{"Critical", "High", "Medium", "Low"}
 
 var vulnTypeStyles = map[string]lipgloss.Style{
-	"Critical": CriticalStyle,
-	"High":     HighStyle,
-	"Medium":   MediumStyle,
-	"Low":      LowStyle,
+	"Critical": criticalStyle,
+	"High":     highStyle,
+	"Medium":   mediumStyle,
+	"Low":      lowStyle,
 }
 
 var authTypeOrder = []string{"unauth", "auth", "privileged", "unknown"}
 
-func buildPluginVulns(resultsList []file.PluginEntry) PluginVulnerabilities {
-	pluginVulns := PluginVulnerabilities{Plugins: make(map[string]VulnCategories, len(resultsList))}
+func buildPluginVulns(resultsList []file.PluginEntry) scanner.PluginVulnerabilities {
+	pluginVulns := scanner.PluginVulnerabilities{Plugins: make(map[string]scanner.VulnCategories, len(resultsList))}
 	for _, entry := range resultsList {
 		sevNormalized := severity.Normalize(entry.Severity)
 		cat := pluginVulns.Plugins[entry.Plugin]
@@ -63,21 +64,21 @@ func buildPluginVulns(resultsList []file.PluginEntry) PluginVulnerabilities {
 	return pluginVulns
 }
 
-func buildPluginAuthGroups(resultsList []file.PluginEntry) PluginAuthGroups {
-	pluginAuthGroups := PluginAuthGroups{Plugins: make(map[string]SeverityAuthGroup, len(resultsList))}
+func buildPluginAuthGroups(resultsList []file.PluginEntry) scanner.PluginAuthGroups {
+	pluginAuthGroups := scanner.PluginAuthGroups{Plugins: make(map[string]scanner.SeverityAuthGroup, len(resultsList))}
 
 	for _, entry := range resultsList {
 		sevLabel := severity.FormatTitleCase(entry.Severity)
 
 		pag, ok := pluginAuthGroups.Plugins[entry.Plugin]
 		if !ok {
-			pag = SeverityAuthGroup{Severities: make(map[string]AuthGroup, 4)}
+			pag = scanner.SeverityAuthGroup{Severities: make(map[string]scanner.AuthGroup, 4)}
 			pluginAuthGroups.Plugins[entry.Plugin] = pag
 		}
 
 		ag, ok := pag.Severities[sevLabel]
 		if !ok {
-			ag = AuthGroup{AuthTypes: make(map[string][]string, 3)}
+			ag = scanner.AuthGroup{AuthTypes: make(map[string][]string, 3)}
 			pag.Severities[sevLabel] = ag
 		}
 
@@ -91,7 +92,7 @@ func buildPluginAuthGroups(resultsList []file.PluginEntry) PluginAuthGroups {
 
 func buildSummaryLine(
 	target string,
-	pluginVulns map[string]VulnCategories,
+	pluginVulns map[string]scanner.VulnCategories,
 	vulnTypes []string,
 	vulnStyles map[string]lipgloss.Style,
 ) string {
@@ -113,18 +114,19 @@ func buildSummaryLine(
 		summaryParts = append(summaryParts, fmt.Sprintf("%s: %d", vulnStyles[t].Render(t), total))
 	}
 
-	return fmt.Sprintf("🔎 %s (%s)",
-		URLStyle.Render(target),
+	return fmt.Sprintf("%s (%s)",
+		urlStyle.Render(target),
 		strings.Join(summaryParts, " | "),
 	)
 }
 
-func DisplayResults(ctx DisplayResultsContext) {
-	if isFileScan(ctx.Opts) && ctx.Opts.Output != "" {
+// DisplayResults renders scan results to the terminal using lipgloss styling.
+func DisplayResults(ctx scanner.DisplayResultsContext) {
+	if ctx.Opts.File != "" && ctx.Opts.Output != "" {
 		return
 	}
 	if len(ctx.Detected) == 0 {
-		fmt.Println(NoVulnStyle.Render("No plugins detected for target: " + ctx.Target))
+		fmt.Println(noVulnStyle.Render("No plugins detected for target: " + ctx.Target))
 		return
 	}
 
@@ -136,7 +138,7 @@ func DisplayResults(ctx DisplayResultsContext) {
 	}
 
 	summary := buildSummaryLine(ctx.Target, pv.Plugins, vulnTypeOrder, vulnTypeStyles)
-	root := tree.Root(TitleStyle.Render(summary))
+	root := tree.Root(titleStyle.Render(summary))
 
 	for _, plugin := range sortedPluginsByConfidence(ctx.Detected, ctx.PluginRes.Plugins, pv.Plugins) {
 		version := ctx.Detected[plugin]
@@ -175,7 +177,7 @@ func DisplayResults(ctx DisplayResultsContext) {
 					if end > len(cves) {
 						end = len(cves)
 					}
-					authNode.Child(strings.Join(cves[i:end], " ⋅ "))
+					authNode.Child(strings.Join(cves[i:end], " . "))
 				}
 				sevNode.Child(authNode)
 			}
@@ -195,12 +197,12 @@ func DisplayResults(ctx DisplayResultsContext) {
 	if showWarning {
 		root.Child(
 			tree.Root(
-				"⚠️ indicates that multiple plugins share common endpoints; only one of these is likely active.",
+				"Warning: indicates that multiple plugins share common endpoints; only one of these is likely active.",
 			),
 		)
 	}
 
-	out := SeparatorStyle.Render(root.String())
+	out := separatorStyle.Render(root.String())
 	if ctx.Progress != nil {
 		_, _ = ctx.Progress.Bprintln(out)
 	} else {
@@ -212,23 +214,34 @@ func authLabel(k string) string {
 	authLower := severity.NormalizeAuth(k)
 	switch authLower {
 	case "auth":
-		return AuthStyle.Render("Auth")
+		return authStyle.Render("Auth")
 	case "unauth":
-		return UnauthStyle.Render("Unauth")
+		return unauthStyle.Render("Unauth")
 	case "privileged":
-		return PrivilegedStyle.Render("Privileged")
+		return privilegedStyle.Render("Privileged")
 	default:
-		return UnknownStyle.Render("Unknown")
+		return unknownStyle.Render("Unknown")
 	}
+}
+
+type pluginDisplayData struct {
+	name        string
+	confidence  float64
+	noVersion   bool
+	hasCritical bool
+	hasHigh     bool
+	hasMedium   bool
+	hasLow      bool
+	hasVuln     bool
 }
 
 func sortedPluginsByConfidence(
 	detectedPlugins map[string]string,
-	pluginData map[string]*PluginData,
-	pluginVulns map[string]VulnCategories,
+	pluginData map[string]*scanner.PluginData,
+	pluginVulns map[string]scanner.VulnCategories,
 ) []string {
 
-	plugins := make([]PluginDisplayData, 0, len(detectedPlugins))
+	plugins := make([]pluginDisplayData, 0, len(detectedPlugins))
 	for plugin, version := range detectedPlugins {
 		noVersion := version == "unknown"
 		data := pluginData[plugin]
@@ -246,7 +259,7 @@ func sortedPluginsByConfidence(
 			) > 0
 		}
 
-		plugins = append(plugins, PluginDisplayData{
+		plugins = append(plugins, pluginDisplayData{
 			name:        plugin,
 			confidence:  data.Confidence,
 			noVersion:   noVersion,
@@ -271,7 +284,7 @@ func sortedPluginsByConfidence(
 
 func formatPluginLabel(p, v string, c float64, a bool) string {
 	if a {
-		return fmt.Sprintf("%s (%s) [%.2f%% confidence] ⚠️", p, v, c)
+		return fmt.Sprintf("%s (%s) [%.2f%% confidence] Warning", p, v, c)
 	} else if v == "unknown" {
 		return fmt.Sprintf("%s (%s) [%.2f%% confidence]", p, v, c)
 	} else {
@@ -279,26 +292,26 @@ func formatPluginLabel(p, v string, c float64, a bool) string {
 	}
 }
 
-func getPluginColor(version string, v VulnCategories, ok bool) lipgloss.Style {
+func getPluginColor(version string, v scanner.VulnCategories, ok bool) lipgloss.Style {
 	switch {
 	case version == "unknown":
-		return NoVersionStyle
+		return noVersionStyle
 	case !ok:
-		return NoVulnStyle
+		return noVulnStyle
 	case len(v.Critical) > 0:
-		return CriticalStyle
+		return criticalStyle
 	case len(v.High) > 0:
-		return HighStyle
+		return highStyle
 	case len(v.Medium) > 0:
-		return MediumStyle
+		return mediumStyle
 	case len(v.Low) > 0:
-		return LowStyle
+		return lowStyle
 	default:
-		return NoVulnStyle
+		return noVulnStyle
 	}
 }
 
-func comparePlugins(i, j int, plugins []PluginDisplayData) bool {
+func comparePlugins(i, j int, plugins []pluginDisplayData) bool {
 	a, b := plugins[i], plugins[j]
 	if a.hasCritical != b.hasCritical {
 		return a.hasCritical

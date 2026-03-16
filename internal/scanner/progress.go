@@ -19,47 +19,58 @@
 
 package scanner
 
-import (
-	"github.com/Chocapikk/wpprobe/internal/progress"
-)
+// Progress defines the interface for progress reporting.
+// The real implementation lives in internal/progress and is only
+// imported by CLI code, keeping TUI dependencies out of the library path.
+type Progress interface {
+	Increment()
+	Finish()
+	SetTotal(int)
+	SetMessage(string)
+	RenderBlank()
+	ClearLine()
+	Bprintln(a ...interface{}) (int, error)
+}
 
 func isFileScan(opts ScanOptions) bool {
 	return opts.File != ""
 }
 
-func clearProgressLine(progress *progress.ProgressManager, isFileScan bool) {
-	if progress != nil && !isFileScan {
-		progress.ClearLine()
+func clearProgressLine(p Progress, isFileScan bool) {
+	if p != nil && !isFileScan {
+		p.ClearLine()
 	}
 }
 
-func setProgressMessage(progress *progress.ProgressManager, isFileScan bool, message string) {
-	if progress != nil && !isFileScan {
-		progress.SetMessage(message)
+func setProgressMessage(p Progress, isFileScan bool, message string) {
+	if p != nil && !isFileScan {
+		p.SetMessage(message)
 	}
 }
 
-func finishProgressIfNeeded(progress *progress.ProgressManager) {
-	if progress != nil {
-		progress.Finish()
+func finishProgressIfNeeded(p Progress) {
+	if p != nil {
+		p.Finish()
 	}
 }
 
-func setupBruteforceProgress(opts ScanOptions, parentProgress *progress.ProgressManager, pluginCount int) *progress.ProgressManager {
+func setupBruteforceProgress(opts ScanOptions, parentProgress Progress, pluginCount int) Progress {
 	if parentProgress == nil {
-		return progress.NewProgressBar(pluginCount, "🔎 Bruteforcing plugins...")
+		if opts.NewProgress != nil {
+			return opts.NewProgress(pluginCount, "Bruteforcing plugins...")
+		}
+		return nil
 	}
 
 	if opts.File == "" {
 		parentProgress.SetTotal(pluginCount)
-		parentProgress.SetMessage("🔎 Bruteforcing plugins...")
+		parentProgress.SetMessage("Bruteforcing plugins...")
 	}
 	return parentProgress
 }
 
-func finishBruteforceProgress(progress *progress.ProgressManager, opts ScanOptions) {
-	if progress != nil && opts.File == "" {
-		progress.Finish()
+func finishBruteforceProgress(p Progress, opts ScanOptions) {
+	if p != nil && opts.File == "" {
+		p.Finish()
 	}
 }
-

@@ -24,8 +24,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Chocapikk/wpprobe/internal/display"
 	"github.com/Chocapikk/wpprobe/internal/logger"
-	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/Chocapikk/wpprobe/internal/search"
 	"github.com/Chocapikk/wpprobe/internal/severity"
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
@@ -75,17 +75,17 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	filtered := search.FilterAll(vulns, flagCVE, flagPlugin, flagTitle, flagSeverity, flagAuth)
 	if len(filtered) == 0 {
-		fmt.Println(scanner.UnknownStyle.Render("No vulnerabilities match filters."))
+		fmt.Println(display.UnknownStyle.Render("No vulnerabilities match filters."))
 		return nil
 	}
 
 	byPlugin := search.GroupByPlugin(filtered)
 	summary := buildSearchSummary(filtered, byPlugin)
 
-	root := tree.Root(scanner.TitleStyle.Render(summary))
+	root := tree.Root(display.TitleStyle.Render(summary))
 	search.BuildTree(root, byPlugin, showDetails)
 
-	fmt.Println(scanner.SeparatorStyle.Render(root.String()))
+	fmt.Println(display.SeparatorStyle.Render(root.String()))
 	return nil
 }
 
@@ -113,10 +113,10 @@ func countSeverities(vulns []vulnerability.Vulnerability) map[string]int {
 
 func formatCountSummary(counts map[string]int) string {
 	parts := []string{
-		fmt.Sprintf("%s:%d", scanner.CriticalStyle.Render("C"), counts["critical"]),
-		fmt.Sprintf("%s:%d", scanner.HighStyle.Render("H"), counts["high"]),
-		fmt.Sprintf("%s:%d", scanner.MediumStyle.Render("M"), counts["medium"]),
-		fmt.Sprintf("%s:%d", scanner.LowStyle.Render("L"), counts["low"]),
+		fmt.Sprintf("%s:%d", display.CriticalStyle.Render("C"), counts["critical"]),
+		fmt.Sprintf("%s:%d", display.HighStyle.Render("H"), counts["high"]),
+		fmt.Sprintf("%s:%d", display.MediumStyle.Render("M"), counts["medium"]),
+		fmt.Sprintf("%s:%d", display.LowStyle.Render("L"), counts["low"]),
 	}
 	return strings.Join(parts, " ")
 }

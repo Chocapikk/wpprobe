@@ -17,7 +17,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package scanner
+package display
 
 import (
 	"reflect"
@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
+	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -35,7 +36,7 @@ func Test_buildPluginVulns(t *testing.T) {
 		{Plugin: "plugin2", Severity: "medium", CVEs: []string{"CVE-3"}},
 	}
 	got := buildPluginVulns(entries).Plugins
-	want := map[string]VulnCategories{
+	want := map[string]scanner.VulnCategories{
 		"plugin1": {
 			Critical: []string{"CVE-1"},
 			High:     []string{"CVE-2"},
@@ -56,9 +57,9 @@ func Test_buildPluginAuthGroups(t *testing.T) {
 		{Plugin: "plugin1", Severity: "high", CVEs: []string{"CVE-3"}, AuthType: "Unknown"},
 	}
 	got := buildPluginAuthGroups(entries).Plugins
-	want := map[string]SeverityAuthGroup{
+	want := map[string]scanner.SeverityAuthGroup{
 		"plugin1": {
-			Severities: map[string]AuthGroup{
+			Severities: map[string]scanner.AuthGroup{
 				"Critical": {AuthTypes: map[string][]string{
 					"unauth": {"CVE-1"},
 					"auth":   {"CVE-2"},
@@ -75,7 +76,7 @@ func Test_buildPluginAuthGroups(t *testing.T) {
 }
 
 func Test_buildSummaryLine(t *testing.T) {
-	pluginVulns := map[string]VulnCategories{
+	pluginVulns := map[string]scanner.VulnCategories{
 		"plugin1": {
 			Critical: []string{"CVE-1"},
 			High:     []string{"CVE-2", "CVE-3"},
@@ -104,12 +105,12 @@ func Test_sortedPluginsByConfidence(t *testing.T) {
 		"pluginB": "unknown",
 		"pluginC": "2.0",
 	}
-	argsConfidence := map[string]*PluginData{
+	argsConfidence := map[string]*scanner.PluginData{
 		"pluginA": {Confidence: 90.0},
 		"pluginB": {Confidence: 60.0},
 		"pluginC": {Confidence: 80.0},
 	}
-	argsVulns := map[string]VulnCategories{
+	argsVulns := map[string]scanner.VulnCategories{
 		"pluginA": {Critical: []string{"CVE-2023-1111"}},
 		"pluginB": {},
 		"pluginC": {High: []string{"CVE-2022-5678"}},
@@ -142,7 +143,7 @@ func Test_formatPluginLabel(t *testing.T) {
 			false,
 			"plugin (unknown) [75.00% confidence]",
 		},
-		{"Ambiguous", "plugin", "1.0", 90.0, true, "plugin (1.0) [90.00% confidence] ⚠️"},
+		{"Ambiguous", "plugin", "1.0", 90.0, true, "plugin (1.0) [90.00% confidence] Warning"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -157,19 +158,19 @@ func Test_getPluginColor(t *testing.T) {
 	tests := []struct {
 		name           string
 		version        string
-		vulnCategories VulnCategories
+		vulnCategories scanner.VulnCategories
 		exists         bool
 		want           lipgloss.Style
 	}{
 		{
 			"CriticalVuln",
 			"1.0",
-			VulnCategories{Critical: []string{"CVE-2023-1111"}},
+			scanner.VulnCategories{Critical: []string{"CVE-2023-1111"}},
 			true,
 			criticalStyle,
 		},
-		{"NoVuln", "1.0", VulnCategories{}, true, noVulnStyle},
-		{"UnknownVersion", "unknown", VulnCategories{}, false, noVersionStyle},
+		{"NoVuln", "1.0", scanner.VulnCategories{}, true, noVulnStyle},
+		{"UnknownVersion", "unknown", scanner.VulnCategories{}, false, noVersionStyle},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

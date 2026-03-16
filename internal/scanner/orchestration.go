@@ -159,13 +159,15 @@ func ScanSite(ctx ScanSiteContext) {
 
 	writeResults(ctx.Writer, ctx.Target, entriesList)
 
-	displayCtx := DisplayResultsContext{
-		Target:    ctx.Target,
-		Detected:  entriesMap,
-		PluginRes: result,
-		Results:   entriesList,
-		Opts:      ctx.Opts,
-		Progress:  ctx.Progress,
+	if ctx.Opts.DisplayFunc != nil {
+		displayCtx := DisplayResultsContext{
+			Target:    ctx.Target,
+			Detected:  entriesMap,
+			PluginRes: result,
+			Results:   entriesList,
+			Opts:      ctx.Opts,
+			Progress:  ctx.Progress,
+		}
+		ctx.Opts.DisplayFunc(displayCtx)
 	}
-	DisplayResults(displayCtx)
 }

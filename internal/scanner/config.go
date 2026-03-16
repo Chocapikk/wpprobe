@@ -22,7 +22,6 @@ package scanner
 import (
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
-	"github.com/Chocapikk/wpprobe/internal/progress"
 )
 
 func loadTargets(opts ScanOptions) []string {
@@ -85,11 +84,14 @@ func buildScanConfig(opts ScanOptions, targetCount int) scanConfig {
 	}
 }
 
-func createProgressManager(opts ScanOptions, targetCount int) *progress.ProgressManager {
-	if opts.File != "" {
-		return progress.NewProgressBar(targetCount, "🔎 Scanning...")
+func createProgressManager(opts ScanOptions, targetCount int) Progress {
+	if opts.NewProgress == nil {
+		return nil
 	}
-	return progress.NewProgressBar(1, "🔎 Scanning...")
+	if opts.File != "" {
+		return opts.NewProgress(targetCount, "Scanning...")
+	}
+	return opts.NewProgress(1, "Scanning...")
 }
 
 func createWriter(opts ScanOptions) file.WriterInterface {
@@ -104,4 +106,3 @@ func closeWriter(writer file.WriterInterface) {
 		writer.Close()
 	}
 }
-

@@ -26,7 +26,6 @@ import (
 
 	"github.com/Chocapikk/wpprobe/internal/file"
 	wphttp "github.com/Chocapikk/wpprobe/internal/http"
-	"github.com/Chocapikk/wpprobe/internal/progress"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 )
 
@@ -48,6 +47,8 @@ type ScanOptions struct {
 	Context        context.Context      // Context for cancellation
 	HTTPClient     *http.Client         // External HTTP client (optional, for connection pooling)
 	SharedLimiter  *wphttp.RateLimiter  // Global rate limiter shared across all targets
+	NewProgress    func(total int, message string) Progress // Factory for creating progress bars (CLI only)
+	DisplayFunc    func(DisplayResultsContext)              // Callback for displaying results (CLI only)
 }
 
 // PluginData contains information about a detected plugin.
@@ -92,18 +93,6 @@ type AuthGroup struct {
 	AuthTypes map[string][]string
 }
 
-// PluginDisplayData contains data for displaying plugin information.
-type PluginDisplayData struct {
-	name        string
-	confidence  float64
-	noVersion   bool
-	hasCritical bool
-	hasHigh     bool
-	hasMedium   bool
-	hasLow      bool
-	hasVuln     bool
-}
-
 // HTTPConfigFromOpts builds an http.Config from ScanOptions.
 // Uses the global shared rate limiter from opts, or creates one if not set.
 func HTTPConfigFromOpts(opts ScanOptions) wphttp.Config {
@@ -126,7 +115,7 @@ type ScanContext struct {
 	Target   string
 	Threads  int
 	HTTP     wphttp.Config
-	Progress *progress.ProgressManager
+	Progress Progress
 }
 
 // BruteforceRequest contains request parameters for bruteforce operations.
@@ -134,7 +123,7 @@ type BruteforceRequest struct {
 	Target   string
 	Plugins  []string
 	Threads  int
-	Progress *progress.ProgressManager
+	Progress Progress
 	HTTP     wphttp.Config
 }
 
@@ -144,7 +133,7 @@ type HybridScanRequest struct {
 	StealthyPlugins  []string
 	BruteforcePlugins []string
 	Threads          int
-	Progress         *progress.ProgressManager
+	Progress         Progress
 	HTTP             wphttp.Config
 }
 
@@ -166,7 +155,7 @@ type VulnerabilityCheckRequest struct {
 	Target   string
 	Vulns    []wordfence.Vulnerability
 	Opts     ScanOptions
-	Progress *progress.ProgressManager
+	Progress Progress
 	Versions map[string]string
 	Ctx      context.Context // Context for cancellation
 }
@@ -191,7 +180,7 @@ type ScanExecutionConfig struct {
 	Opts     ScanOptions
 	Vulns    []wordfence.Vulnerability
 	Config   scanConfig
-	Progress *progress.ProgressManager
+	Progress Progress
 	Writer   file.WriterInterface
 }
 
@@ -206,7 +195,7 @@ type scanConfig struct {
 type ScanExecutionContext struct {
 	Target   string
 	Opts     ScanOptions
-	Progress *progress.ProgressManager
+	Progress Progress
 	Ctx      context.Context
 }
 
@@ -215,7 +204,7 @@ type ScanSiteContext struct {
 	Target   string
 	Opts     ScanOptions
 	Writer   file.WriterInterface
-	Progress *progress.ProgressManager
+	Progress Progress
 	Vulns    []wordfence.Vulnerability
 }
 
@@ -225,7 +214,7 @@ type TargetScanContext struct {
 	Opts     ScanOptions
 	PerSite  int
 	Writer   file.WriterInterface
-	Progress *progress.ProgressManager
+	Progress Progress
 	Vulns    []wordfence.Vulnerability
 	Sem      chan struct{}
 	Wg       *sync.WaitGroup
@@ -238,6 +227,6 @@ type DisplayResultsContext struct {
 	PluginRes PluginDetectionResult
 	Results   []file.PluginEntry
 	Opts      ScanOptions
-	Progress  *progress.ProgressManager
+	Progress  Progress
 }
 

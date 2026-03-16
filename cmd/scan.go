@@ -24,8 +24,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Chocapikk/wpprobe/internal/display"
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
+	"github.com/Chocapikk/wpprobe/internal/progress"
 	"github.com/Chocapikk/wpprobe/internal/scanner"
 	"github.com/spf13/cobra"
 )
@@ -100,6 +102,10 @@ var scanCmd = &cobra.Command{
 			Headers:        headers,
 			Proxy:          proxyURL,
 			RateLimit:      rateLimit,
+			NewProgress: func(total int, message string) scanner.Progress {
+				return progress.NewProgressBar(total, message)
+			},
+			DisplayFunc: display.DisplayResults,
 		}
 
 		if opts.URL == "" && opts.File == "" {

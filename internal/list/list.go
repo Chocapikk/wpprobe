@@ -22,7 +22,7 @@ package list
 import (
 	"fmt"
 
-	"github.com/Chocapikk/wpprobe/internal/scanner"
+	"github.com/Chocapikk/wpprobe/internal/display"
 	"github.com/Chocapikk/wpprobe/internal/severity"
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 	"github.com/charmbracelet/lipgloss/tree"
@@ -42,14 +42,14 @@ func RunList() error {
 	}
 	count := severity.CountBySeverity(severities)
 
-	root := tree.Root(scanner.TitleStyle.Render("📊 CVE coverage database"))
+	root := tree.Root(display.TitleStyle.Render("📊 CVE coverage database"))
 
 	styles := map[string]func(string) string{
-		"critical": func(s string) string { return scanner.CriticalStyle.Render(s) },
-		"high":     func(s string) string { return scanner.HighStyle.Render(s) },
-		"medium":   func(s string) string { return scanner.MediumStyle.Render(s) },
-		"low":      func(s string) string { return scanner.LowStyle.Render(s) },
-		"unknown":  func(s string) string { return scanner.UnknownStyle.Render(s) },
+		"critical": func(s string) string { return display.CriticalStyle.Render(s) },
+		"high":     func(s string) string { return display.HighStyle.Render(s) },
+		"medium":   func(s string) string { return display.MediumStyle.Render(s) },
+		"low":      func(s string) string { return display.LowStyle.Render(s) },
+		"unknown":  func(s string) string { return display.UnknownStyle.Render(s) },
 	}
 
 	for _, sev := range severity.Order {
@@ -62,10 +62,10 @@ func RunList() error {
 		root.Child(tree.Root(fmt.Sprintf("%s: %d", label, count[sev])))
 	}
 
-	root.Child(tree.Root(scanner.URLStyle.Render(
+	root.Child(tree.Root(display.URLStyle.Render(
 		fmt.Sprintf("Total detectable CVEs: %d", total),
 	)))
 
-	fmt.Println(scanner.SeparatorStyle.Render(root.String()))
+	fmt.Println(display.SeparatorStyle.Render(root.String()))
 	return nil
 }

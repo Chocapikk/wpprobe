@@ -23,7 +23,6 @@ import (
 	"fmt"
 
 	"github.com/Chocapikk/wpprobe/internal/logger"
-	"github.com/Chocapikk/wpprobe/internal/progress"
 )
 
 func getScanMode(mode string) string {
@@ -61,7 +60,7 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 		}
 	}
 
-	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "🔎 Discovering plugins from HTML...")
+	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "Discovering plugins from HTML...")
 
 	httpCfg := HTTPConfigFromOpts(ctx.Opts)
 	htmlSlugs, err := discoverPluginsFromHTML(ctx.Ctx, ctx.Target, httpCfg)
@@ -82,7 +81,7 @@ func performStealthyScan(ctx ScanExecutionContext) ([]string, PluginDetectionRes
 		}
 	}
 
-	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "🔎 Scanning REST API endpoints...")
+	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "Scanning REST API endpoints...")
 
 	endpointsData, err := loadEndpointsData()
 	if err != nil {
@@ -145,9 +144,9 @@ func performHybridScan(ctx ScanExecutionContext) ([]string, PluginDetectionResul
 }
 
 func performBruteforceOnRemaining(ctx ScanExecutionContext, remaining []string) ([]string, map[string]string) {
-	var bruteBar *progress.ProgressManager
-	if ctx.Opts.File == "" {
-		bruteBar = progress.NewProgressBar(len(remaining), "🔎 Bruteforcing remaining")
+	var bruteBar Progress
+	if ctx.Opts.File == "" && ctx.Opts.NewProgress != nil {
+		bruteBar = ctx.Opts.NewProgress(len(remaining), "Bruteforcing remaining")
 		defer bruteBar.Finish()
 	}
 
@@ -161,4 +160,3 @@ func performBruteforceOnRemaining(ctx ScanExecutionContext, remaining []string) 
 	detected, versions := BruteforcePlugins(bruteReq)
 	return detected, versions
 }
-

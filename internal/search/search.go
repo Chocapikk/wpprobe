@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Chocapikk/wpprobe/internal/scanner"
+	"github.com/Chocapikk/wpprobe/internal/display"
 	"github.com/Chocapikk/wpprobe/internal/severity"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 	"github.com/charmbracelet/lipgloss/tree"
@@ -175,7 +175,7 @@ func buildPluginNode(slug string, counts map[string]int) *tree.Tree {
 
 func formatPluginLabel(slug string, counts map[string]int) string {
 	parts := []string{
-		scanner.URLStyle.Render(slug),
+		display.URLStyle.Render(slug),
 		formatSeverityCount("C", "critical", counts),
 		formatSeverityCount("H", "high", counts),
 		formatSeverityCount("M", "medium", counts),
@@ -193,21 +193,21 @@ func formatSeverityCount(abbrev, sev string, counts map[string]int) string {
 func getSeverityStyle(sev string) func(string) string {
 	switch strings.ToLower(sev) {
 	case "critical":
-		return func(s string) string { return scanner.CriticalStyle.Render(s) }
+		return func(s string) string { return display.CriticalStyle.Render(s) }
 	case "high":
-		return func(s string) string { return scanner.HighStyle.Render(s) }
+		return func(s string) string { return display.HighStyle.Render(s) }
 	case "medium":
-		return func(s string) string { return scanner.MediumStyle.Render(s) }
+		return func(s string) string { return display.MediumStyle.Render(s) }
 	case "low":
-		return func(s string) string { return scanner.LowStyle.Render(s) }
+		return func(s string) string { return display.LowStyle.Render(s) }
 	default:
-		return func(s string) string { return scanner.UnknownStyle.Render(s) }
+		return func(s string) string { return display.UnknownStyle.Render(s) }
 	}
 }
 
 func buildDownloadLink(slug string) *tree.Tree {
 	link := fmt.Sprintf("Download: https://wordpress.org/plugins/%s/", slug)
-	return tree.Root(scanner.URLStyle.Render(link))
+	return tree.Root(display.URLStyle.Render(link))
 }
 
 func addSeverityDetails(pluginNode *tree.Tree, list []wordfence.Vulnerability) {
@@ -270,12 +270,12 @@ func formatAuth(auth string) string {
 	authLower := severity.NormalizeAuth(auth)
 	switch authLower {
 	case "auth":
-		return scanner.AuthStyle.Render("Auth")
+		return display.AuthStyle.Render("Auth")
 	case "unauth":
-		return scanner.UnauthStyle.Render("Unauth")
+		return display.UnauthStyle.Render("Unauth")
 	case "privileged":
-		return scanner.PrivilegedStyle.Render("Privileged")
+		return display.PrivilegedStyle.Render("Privileged")
 	default:
-		return scanner.UnknownStyle.Render(auth)
+		return display.UnknownStyle.Render(auth)
 	}
 }

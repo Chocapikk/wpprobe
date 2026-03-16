@@ -69,19 +69,19 @@ func buildHTML(pluginCount int) string {
 	sb.WriteString("<!DOCTYPE html><html><head>")
 	for i := 0; i < pluginCount; i++ {
 		slug := fmt.Sprintf("plugin-%d", i)
-		sb.WriteString(fmt.Sprintf(
+		fmt.Fprintf(&sb,
 			`<link rel="stylesheet" href="https://example.com/wp-content/plugins/%s/css/style.css">`,
 			slug,
-		))
-		sb.WriteString(fmt.Sprintf(
+		)
+		fmt.Fprintf(&sb,
 			`<script src="https://example.com/wp-content/plugins/%s/js/main.js"></script>`,
 			slug,
-		))
+		)
 	}
 	sb.WriteString("</head><body>")
 	// Add some noise
 	for i := 0; i < pluginCount; i++ {
-		sb.WriteString(fmt.Sprintf(`<div class="widget-%d"><p>Content %d</p></div>`, i, i))
+		fmt.Fprintf(&sb, `<div class="widget-%d"><p>Content %d</p></div>`, i, i)
 	}
 	sb.WriteString("</body></html>")
 	return sb.String()
@@ -139,11 +139,11 @@ func BenchmarkExtractSlugsFromReader_RealWorldPage(b *testing.B) {
 <div class="header"><img src="/wp-content/uploads/2024/01/logo.png"></div>
 <div class="content">`)
 	for i := 0; i < 20; i++ {
-		sb.WriteString(fmt.Sprintf(`<article class="post-%d">
+		fmt.Fprintf(&sb, `<article class="post-%d">
 <h2>Blog Post %d</h2>
 <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
 <img src="/wp-content/uploads/2024/01/image-%d.jpg">
-</article>`, i, i, i))
+</article>`, i, i, i)
 	}
 	sb.WriteString(`</div>
 <div class="sidebar">
@@ -164,7 +164,7 @@ func BenchmarkExtractSlugsFromReader_NoPlugins(b *testing.B) {
 	var sb strings.Builder
 	sb.WriteString("<!DOCTYPE html><html><head><title>Plain</title></head><body>")
 	for i := 0; i < 100; i++ {
-		sb.WriteString(fmt.Sprintf(`<div><p>Paragraph %d with no plugin references.</p></div>`, i))
+		fmt.Fprintf(&sb, `<div><p>Paragraph %d with no plugin references.</p></div>`, i)
 	}
 	sb.WriteString("</body></html>")
 	html := sb.String()
