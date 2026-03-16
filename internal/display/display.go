@@ -244,7 +244,10 @@ func sortedPluginsByConfidence(
 	plugins := make([]pluginDisplayData, 0, len(detectedPlugins))
 	for plugin, version := range detectedPlugins {
 		noVersion := version == "unknown"
-		data := pluginData[plugin]
+		data, exists := pluginData[plugin]
+		if !exists {
+			continue
+		}
 		vulns, existsV := pluginVulns[plugin]
 		hc, hh, hm, hl := false, false, false, false
 		if existsV {
