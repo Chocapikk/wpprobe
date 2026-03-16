@@ -101,5 +101,6 @@ func (p PluginsCollection) MarshalJSON() ([]byte, error) {
 type OutputResults struct {
 	URL     string            `json:"url"`
 	Plugins PluginsCollection `json:"plugins"`
+	Themes  PluginsCollection `json:"themes,omitempty"`
 }
 

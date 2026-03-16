@@ -243,22 +243,28 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	defer j.mu.Unlock()
 
 	pluginResultsMap := make(map[string]*PluginResult)
+	themeResultsMap := make(map[string]*PluginResult)
 
 	for _, entry := range results {
-		pluginName := entry.Slug
+		slugName := entry.Slug
 		version := entry.Version
 		severity := entry.Severity
 		auth := strings.ToLower(entry.AuthType)
 
-		pr, ok := pluginResultsMap[pluginName]
+		targetMap := pluginResultsMap
+		if entry.SoftwareType == "theme" {
+			targetMap = themeResultsMap
+		}
+
+		pr, ok := targetMap[slugName]
 		if !ok {
-			pr = &PluginResult{Name: pluginName, Versions: []VersionGroup{}}
-			pluginResultsMap[pluginName] = pr
+			pr = &PluginResult{Name: slugName, Versions: []VersionGroup{}}
+			targetMap[slugName] = pr
 		}
 
 		vg := findOrCreateVersionGroup(pr, version)
 
-		// Skip empty severity entries - just keep plugin name + version
+		// Skip empty severity entries - just keep name + version
 		if len(entry.CVEs) == 0 && severity == "none" {
 			continue
 		}
@@ -281,15 +287,25 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 			sortSeveritiesByOrder(pr.Versions[i].Severities)
 		}
 	}
+	for _, pr := range themeResultsMap {
+		for i := range pr.Versions {
+			sortSeveritiesByOrder(pr.Versions[i].Severities)
+		}
+	}
 
 	var pluginsColl PluginsCollection
 	for _, pr := range pluginResultsMap {
 		pluginsColl = append(pluginsColl, *pr)
 	}
+	var themesColl PluginsCollection
+	for _, pr := range themeResultsMap {
+		themesColl = append(themesColl, *pr)
+	}
 
 	outputEntry := OutputResults{
 		URL:     url,
 		Plugins: pluginsColl,
+		Themes:  themesColl,
 	}
 
 	var buffer bytes.Buffer
