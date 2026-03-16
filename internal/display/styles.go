@@ -44,6 +44,9 @@ var (
 	authStyle       = bold.Foreground(lipgloss.Color("#00FF00"))
 	privilegedStyle = bold.Foreground(lipgloss.Color("#8A2BE2"))
 	unknownStyle    = bold.Foreground(lipgloss.Color("#FFA500"))
+
+	pluginSectionStyle = bold.Foreground(lipgloss.Color("#00BFFF"))
+	themeSectionStyle  = bold.Foreground(lipgloss.Color("#DA70D6"))
 )
 
 // Exported styles for use in other packages (list, search).

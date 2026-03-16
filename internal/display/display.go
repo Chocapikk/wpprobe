@@ -126,7 +126,7 @@ func DisplayResults(ctx scanner.DisplayResultsContext) {
 		return
 	}
 	if len(ctx.Detected) == 0 {
-		fmt.Println(noVulnStyle.Render("No plugins detected for target: " + ctx.Target))
+		fmt.Println(noVulnStyle.Render("No plugins or themes detected for target: " + ctx.Target))
 		return
 	}
 
@@ -140,51 +140,42 @@ func DisplayResults(ctx scanner.DisplayResultsContext) {
 	summary := buildSummaryLine(ctx.Target, pv.Plugins, vulnTypeOrder, vulnTypeStyles)
 	root := tree.Root(titleStyle.Render(summary))
 
-	for _, plugin := range sortedPluginsByConfidence(ctx.Detected, ctx.PluginRes.Plugins, pv.Plugins) {
-		version := ctx.Detected[plugin]
-		conf := ctx.PluginRes.Plugins[plugin].Confidence
-		ambiguous := ctx.PluginRes.Plugins[plugin].Ambiguous
-		label := formatPluginLabel(plugin, version, conf, ambiguous)
+	sortedPlugins := sortedPluginsByConfidence(ctx.Detected, ctx.PluginRes.Plugins, pv.Plugins)
+	themes := collectThemeSlugs(ctx.Results)
+	sortedThemeList := sortedThemes(themes, pv.Plugins)
+	hasPlugins := len(sortedPlugins) > 0
+	hasThemes := len(sortedThemeList) > 0
 
-		vulnCat, ok := pv.Plugins[plugin]
-		plNode := tree.Root(getPluginColor(version, vulnCat, ok).Render(label))
-
-		authGroups, hasAG := pa.Plugins[plugin]
-		if !hasAG {
-			root.Child(plNode)
-			continue
+	if hasPlugins {
+		parent := root
+		if hasThemes {
+			parent = tree.Root(pluginSectionStyle.Render("Plugins"))
 		}
-
-		for _, sev := range vulnTypeOrder {
-			sGrp, sOk := authGroups.Severities[sev]
-			if !sOk {
-				continue
-			}
-
-			sevNode := tree.Root(vulnTypeStyles[sev].Render(sev))
-			for _, key := range authTypeOrder {
-				cves, cOk := sGrp.AuthTypes[key]
-				if !cOk {
-					continue
-				}
-				if len(cves) == 0 {
-					continue
-				}
-
-				authNode := tree.Root(authLabel(key))
-				for i := 0; i < len(cves); i += 4 {
-					end := i + 4
-					if end > len(cves) {
-						end = len(cves)
-					}
-					authNode.Child(strings.Join(cves[i:end], " . "))
-				}
-				sevNode.Child(authNode)
-			}
-			plNode.Child(sevNode)
+		for _, plugin := range sortedPlugins {
+			version := ctx.Detected[plugin]
+			conf := ctx.PluginRes.Plugins[plugin].Confidence
+			ambiguous := ctx.PluginRes.Plugins[plugin].Ambiguous
+			label := formatPluginLabel(plugin, version, conf, ambiguous)
+			parent.Child(buildSlugNode(plugin, version, label, pv.Plugins, pa))
 		}
+		if hasThemes {
+			root.Child(parent)
+		}
+	}
 
-		root.Child(plNode)
+	if hasThemes {
+		parent := root
+		if hasPlugins {
+			parent = tree.Root(themeSectionStyle.Render("Themes"))
+		}
+		for _, theme := range sortedThemeList {
+			version := themes[theme]
+			label := formatThemeLabel(theme, version)
+			parent.Child(buildSlugNode(theme, version, label, pv.Plugins, pa))
+		}
+		if hasPlugins {
+			root.Child(parent)
+		}
 	}
 
 	showWarning := false
@@ -208,6 +199,98 @@ func DisplayResults(ctx scanner.DisplayResultsContext) {
 	} else {
 		fmt.Println(out)
 	}
+}
+
+func buildSlugNode(slug, version, label string, vulns map[string]scanner.VulnCategories, pa scanner.PluginAuthGroups) *tree.Tree {
+	vulnCat, ok := vulns[slug]
+	node := tree.Root(getPluginColor(version, vulnCat, ok).Render(label))
+
+	authGroups, hasAG := pa.Plugins[slug]
+	if !hasAG {
+		return node
+	}
+	for _, sev := range vulnTypeOrder {
+		sGrp, sOk := authGroups.Severities[sev]
+		if !sOk {
+			continue
+		}
+		sevNode := tree.Root(vulnTypeStyles[sev].Render(sev))
+		for _, key := range authTypeOrder {
+			cves, cOk := sGrp.AuthTypes[key]
+			if !cOk || len(cves) == 0 {
+				continue
+			}
+			authNode := tree.Root(authLabel(key))
+			for i := 0; i < len(cves); i += 4 {
+				end := i + 4
+				if end > len(cves) {
+					end = len(cves)
+				}
+				authNode.Child(strings.Join(cves[i:end], " . "))
+			}
+			sevNode.Child(authNode)
+		}
+		node.Child(sevNode)
+	}
+	return node
+}
+
+func collectThemeSlugs(results []file.PluginEntry) map[string]string {
+	themes := make(map[string]string)
+	for _, entry := range results {
+		if entry.SoftwareType == "theme" {
+			if _, exists := themes[entry.Slug]; !exists {
+				themes[entry.Slug] = entry.Version
+			}
+		}
+	}
+	return themes
+}
+
+func sortedThemes(themes map[string]string, vulns map[string]scanner.VulnCategories) []string {
+	type themeData struct {
+		name    string
+		hasVuln bool
+		sevRank int // 0=critical, 1=high, 2=medium, 3=low, 4=none
+	}
+	list := make([]themeData, 0, len(themes))
+	for name := range themes {
+		cat, ok := vulns[name]
+		rank := 4
+		hasVuln := false
+		if ok {
+			switch {
+			case len(cat.Critical) > 0:
+				rank = 0
+				hasVuln = true
+			case len(cat.High) > 0:
+				rank = 1
+				hasVuln = true
+			case len(cat.Medium) > 0:
+				rank = 2
+				hasVuln = true
+			case len(cat.Low) > 0:
+				rank = 3
+				hasVuln = true
+			}
+		}
+		list = append(list, themeData{name: name, hasVuln: hasVuln, sevRank: rank})
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].sevRank != list[j].sevRank {
+			return list[i].sevRank < list[j].sevRank
+		}
+		return list[i].name < list[j].name
+	})
+	sorted := make([]string, len(list))
+	for i, t := range list {
+		sorted[i] = t.name
+	}
+	return sorted
+}
+
+func formatThemeLabel(name, version string) string {
+	return fmt.Sprintf("%s (%s)", name, version)
 }
 
 func authLabel(k string) string {

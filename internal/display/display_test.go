@@ -154,6 +154,48 @@ func Test_formatPluginLabel(t *testing.T) {
 	}
 }
 
+func Test_collectThemeSlugs(t *testing.T) {
+	results := []file.PluginEntry{
+		{Slug: "plugin1", SoftwareType: "plugin", Version: "1.0"},
+		{Slug: "theme1", SoftwareType: "theme", Version: "2.0"},
+		{Slug: "theme2", SoftwareType: "theme", Version: "unknown"},
+		{Slug: "plugin2", SoftwareType: "plugin", Version: "3.0"},
+	}
+	got := collectThemeSlugs(results)
+	want := map[string]string{
+		"theme1": "2.0",
+		"theme2": "unknown",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("collectThemeSlugs() = %v, want %v", got, want)
+	}
+}
+
+func Test_sortedThemes(t *testing.T) {
+	themes := map[string]string{
+		"theme-a": "1.0",
+		"theme-b": "2.0",
+		"theme-c": "3.0",
+	}
+	vulns := map[string]scanner.VulnCategories{
+		"theme-b": {Critical: []string{"CVE-1"}},
+		"theme-c": {Medium: []string{"CVE-2"}},
+	}
+	got := sortedThemes(themes, vulns)
+	want := []string{"theme-b", "theme-c", "theme-a"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sortedThemes() = %v, want %v", got, want)
+	}
+}
+
+func Test_formatThemeLabel(t *testing.T) {
+	label := formatThemeLabel("flavor", "1.2.3")
+	want := "flavor (1.2.3)"
+	if label != want {
+		t.Errorf("formatThemeLabel() = %v, want %v", label, want)
+	}
+}
+
 func Test_getPluginColor(t *testing.T) {
 	tests := []struct {
 		name           string

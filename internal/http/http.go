@@ -293,6 +293,29 @@ func (h *HTTPClientManager) GetStatusAndBody(ctx context.Context, url string) (i
 	return resp.StatusCode, string(data), nil
 }
 
+// GetPartialWithContext sends a GET request and reads at most maxBytes of the response body.
+// Useful for fetching just the header portion of large files (e.g. CSS theme version).
+func (h *HTTPClientManager) GetPartialWithContext(ctx context.Context, url string, maxBytes int) (string, error) {
+	req, err := h.newRequest(ctx, "GET", url)
+	if err != nil {
+		return "", err
+	}
+	resp, err := h.doRequest(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("non-success status code: %s", resp.Status)
+	}
+	limited := io.LimitReader(resp.Body, int64(maxBytes))
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+	return string(data), nil
+}
+
 func (h *HTTPClientManager) Get(url string) (string, error) {
 	return h.GetWithContext(context.Background(), url)
 }

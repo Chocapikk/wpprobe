@@ -124,6 +124,7 @@ func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager,
 }
 
 // GetThemeVersionWithContext fetches the theme version from style.css.
+// Only reads the first 8KB since the Version header is at the top of the file.
 func GetThemeVersionWithContext(ctx context.Context, target, theme string, cfg http.Config) string {
 	httpClient := cfg.NewClient(10 * time.Second)
 	select {
@@ -132,13 +133,9 @@ func GetThemeVersionWithContext(ctx context.Context, target, theme string, cfg h
 	default:
 	}
 	url := target + "/wp-content/themes/" + theme + "/style.css"
-	body, err := httpClient.GetWithContext(ctx, url)
+	body, err := httpClient.GetPartialWithContext(ctx, url, 8192)
 	if err != nil {
 		return "unknown"
-	}
-	// Only parse the header part (first 8KB is enough for CSS headers)
-	if len(body) > 8192 {
-		body = body[:8192]
 	}
 	if m := themeVersionRegex.FindStringSubmatch(body); len(m) > 1 {
 		return strings.TrimSpace(m[1])

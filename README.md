@@ -18,7 +18,7 @@
 
 # WPProbe
 
-A fast WordPress plugin scanner that detects installed plugins via REST API enumeration and maps them to known vulnerabilities. Over 5000 plugins detectable without brute-force, thousands more with it.
+A fast WordPress plugin and theme scanner that detects installed plugins via REST API enumeration and themes from HTML discovery, then maps them to known vulnerabilities. Over 5000 plugins detectable without brute-force, thousands more with it.
 
 ## Important: Wordfence API Change
 
@@ -42,7 +42,7 @@ wpprobe scan -u https://example.com
 
 | Mode | Method | Stealth | Coverage |
 |------|--------|---------|----------|
-| `stealthy` (default) | REST API endpoint matching | High | 5000+ plugins |
+| `stealthy` (default) | REST API endpoint matching + HTML theme discovery | High | 5000+ plugins + themes |
 | `bruteforce` | Direct directory checks | Low | 10k+ plugins |
 | `hybrid` | Stealthy first, then brute-force | Medium | Maximum |
 
@@ -147,13 +147,13 @@ wpprobe update
 
 ## How It Works
 
-**Stealthy mode** queries exposed REST API routes (`?rest_route=/`) and matches discovered endpoints against a precompiled database of known plugin signatures. This generates minimal requests and avoids detection by WAFs.
+**Stealthy mode** queries exposed REST API routes (`?rest_route=/`) and matches discovered endpoints against a precompiled database of known plugin signatures. It also discovers active themes by parsing `wp-content/themes/` references from the page HTML and fetches their version from `style.css`. This generates minimal requests and avoids detection by WAFs.
 
 **Brute-force mode** checks plugin directories directly via GET requests. A 403 response confirms the plugin exists (directory listing forbidden). A 200 response is validated by checking for `readme.txt` in the directory listing to avoid false positives from WordPress instances that return 200 for all paths.
 
-**Hybrid mode** combines both: stealthy first for low-noise detection, then brute-force for remaining plugins.
+**Hybrid mode** combines both: stealthy first for low-noise detection, then brute-force for remaining plugins. Themes are always discovered via HTML regardless of mode.
 
-Detected plugins are correlated with known CVEs from Wordfence and WPScan databases, with version range matching to identify vulnerable installations.
+Detected plugins and themes are correlated with known CVEs from Wordfence and WPScan databases, with version range matching to identify vulnerable installations.
 
 <details>
 <summary>Output format examples</summary>
@@ -205,8 +205,8 @@ http://example.com,give,2.20.1,critical,Unauth,CVE-2025-22777,https://www.cve.or
 
 ## Limitations
 
-- **Stealthy**: Some plugins don't expose REST API endpoints. Disabled or hidden plugins may not be detected.
-- **Brute-force**: Generates many requests, may trigger WAFs or rate limits. Limited by wordlist coverage.
+- **Stealthy**: Some plugins don't expose REST API endpoints. Disabled or hidden plugins may not be detected. Theme detection relies on HTML references, so themes loaded dynamically or via child themes may be missed.
+- **Brute-force**: Generates many requests, may trigger WAFs or rate limits. Limited by wordlist coverage. Does not brute-force themes.
 - **Hybrid**: Slower than pure stealthy due to the brute-force phase.
 
 ## Environment Variables
