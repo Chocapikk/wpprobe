@@ -173,7 +173,8 @@ func NewCSVWriter(filename string) *CSVWriter {
 	writer := csv.NewWriter(file)
 	header := []string{
 		"URL",
-		"Plugin",
+		"Type",
+		"Slug",
 		"Version",
 		"Severity",
 		"AuthType",
@@ -195,8 +196,13 @@ func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 	sortResultsBySeverity(results)
 
 	for _, entry := range results {
+		softwareType := entry.SoftwareType
+		if softwareType == "" {
+			softwareType = "plugin"
+		}
 		row := []string{
 			url,
+			softwareType,
 			entry.Slug,
 			entry.Version,
 			entry.Severity,

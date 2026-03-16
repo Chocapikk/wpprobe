@@ -93,12 +93,15 @@ func TestCSVWriter_WriteResults(t *testing.T) {
 		t.Fatalf("Expected at least 2 rows (header + data), got %d", len(records))
 	}
 
-	if len(records[1]) < 10 {
-		t.Fatalf("Expected at least 10 columns, got %d", len(records[1]))
+	if len(records[1]) < 11 {
+		t.Fatalf("Expected at least 11 columns, got %d", len(records[1]))
 	}
 
-	if records[1][1] != "test-plugin" {
-		t.Errorf("Expected plugin 'test-plugin', got %s", records[1][1])
+	if records[1][1] != "plugin" {
+		t.Errorf("Expected type 'plugin', got %s", records[1][1])
+	}
+	if records[1][2] != "test-plugin" {
+		t.Errorf("Expected slug 'test-plugin', got %s", records[1][2])
 	}
 }
 
@@ -299,9 +302,10 @@ func TestCSVWriter_EmptyEntriesPreserved(t *testing.T) {
 	}
 
 	// Both plugins must be present (sorted by severity: none < high)
+	// Columns: URL(0), Type(1), Slug(2), Version(3), ...
 	found := make(map[string]string)
 	for _, row := range records[1:] {
-		found[row[1]] = row[2]
+		found[row[2]] = row[3]
 	}
 	if _, ok := found["vulnerable-plugin"]; !ok {
 		t.Error("Expected 'vulnerable-plugin' in CSV output")
