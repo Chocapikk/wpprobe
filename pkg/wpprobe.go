@@ -228,6 +228,9 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		HTTPClient:     cfg.HTTPClient, // Use external HTTP client if provided
 	}
 
+	// Configure logger verbosity for API usage
+	logger.DefaultLogger.Verbose = cfg.Verbose
+
 	writer := file.NewMemoryWriter()
 	defer writer.Close()
 
