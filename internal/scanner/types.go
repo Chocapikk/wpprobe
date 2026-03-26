@@ -88,9 +88,15 @@ type SeverityAuthGroup struct {
 	Severities map[string]AuthGroup
 }
 
+// CVEEntry holds a CVE ID and its title.
+type CVEEntry struct {
+	ID    string
+	Title string
+}
+
 // AuthGroup groups vulnerabilities by authentication type.
 type AuthGroup struct {
-	AuthTypes map[string][]string
+	AuthTypes map[string][]CVEEntry
 }
 
 // HTTPConfigFromOpts builds an http.Config from ScanOptions.

@@ -60,12 +60,12 @@ func Test_buildPluginAuthGroups(t *testing.T) {
 	want := map[string]scanner.SeverityAuthGroup{
 		"plugin1": {
 			Severities: map[string]scanner.AuthGroup{
-				"Critical": {AuthTypes: map[string][]string{
-					"unauth": {"CVE-1"},
-					"auth":   {"CVE-2"},
+				"Critical": {AuthTypes: map[string][]scanner.CVEEntry{
+					"unauth": {{ID: "CVE-1"}},
+					"auth":   {{ID: "CVE-2"}},
 				}},
-				"High": {AuthTypes: map[string][]string{
-					"unknown": {"CVE-3"},
+				"High": {AuthTypes: map[string][]scanner.CVEEntry{
+					"unknown": {{ID: "CVE-3"}},
 				}},
 			},
 		},

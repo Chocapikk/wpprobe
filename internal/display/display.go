@@ -21,6 +21,7 @@ package display
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -30,6 +31,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 )
+
+var authPrefixRe = regexp.MustCompile(`(?i)^(un)?authenticated(\s*\([^)]+\))?\s+`)
+var rolePrefixRe = regexp.MustCompile(`(?i)^(admin|subscriber|contributor|author|administrator|editor|agent|shop\s+manager)\+\s+`)
 
 var vulnTypeOrder = []string{"Critical", "High", "Medium", "Low"}
 
@@ -78,13 +82,16 @@ func buildPluginAuthGroups(resultsList []file.PluginEntry) scanner.PluginAuthGro
 
 		ag, ok := pag.Severities[sevLabel]
 		if !ok {
-			ag = scanner.AuthGroup{AuthTypes: make(map[string][]string, 3)}
+			ag = scanner.AuthGroup{AuthTypes: make(map[string][]scanner.CVEEntry, 3)}
 			pag.Severities[sevLabel] = ag
 		}
 
 		if len(entry.CVEs) > 0 {
 			authKey := severity.NormalizeAuth(entry.AuthType)
-			ag.AuthTypes[authKey] = append(ag.AuthTypes[authKey], entry.CVEs[0])
+			ag.AuthTypes[authKey] = append(ag.AuthTypes[authKey], scanner.CVEEntry{
+				ID:    entry.CVEs[0],
+				Title: entry.Title,
+			})
 		}
 	}
 	return pluginAuthGroups
@@ -216,17 +223,13 @@ func buildSlugNode(slug, version, label string, vulns map[string]scanner.VulnCat
 		}
 		sevNode := tree.Root(vulnTypeStyles[sev].Render(sev))
 		for _, key := range authTypeOrder {
-			cves, cOk := sGrp.AuthTypes[key]
-			if !cOk || len(cves) == 0 {
+			entries, cOk := sGrp.AuthTypes[key]
+			if !cOk || len(entries) == 0 {
 				continue
 			}
 			authNode := tree.Root(authLabel(key))
-			for i := 0; i < len(cves); i += 4 {
-				end := i + 4
-				if end > len(cves) {
-					end = len(cves)
-				}
-				authNode.Child(strings.Join(cves[i:end], " . "))
+			for _, e := range entries {
+				authNode.Child(formatCVEEntry(e))
 			}
 			sevNode.Child(authNode)
 		}
@@ -395,6 +398,23 @@ func getPluginColor(version string, v scanner.VulnCategories, ok bool) lipgloss.
 	default:
 		return noVulnStyle
 	}
+}
+
+func formatCVEEntry(e scanner.CVEEntry) string {
+	const maxTitle = 60
+	title := e.Title
+	if idx := strings.Index(title, " - "); idx != -1 {
+		title = title[idx+3:]
+	}
+	title = authPrefixRe.ReplaceAllString(title, "")
+	title = rolePrefixRe.ReplaceAllString(title, "")
+	if len(title) > maxTitle {
+		title = title[:maxTitle-3] + "..."
+	}
+	if title == "" {
+		return e.ID
+	}
+	return e.ID + ": " + title
 }
 
 func comparePlugins(i, j int, plugins []pluginDisplayData) bool {
