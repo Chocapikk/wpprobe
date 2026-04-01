@@ -139,10 +139,15 @@ func AutoUpdate(currentVersion string) error {
 	}
 
 	if runtime.GOOS == "windows" {
+		oldFile := currentExe + ".old"
+		_ = os.Remove(oldFile)
+		if err := os.Rename(currentExe, oldFile); err != nil {
+			logger.DefaultLogger.Error("Failed to rename current binary: " + err.Error())
+			return err
+		}
+	} else {
 		if err := os.Remove(currentExe); err != nil {
-			logger.DefaultLogger.Warning(
-				"Failed removing current file (Windows lock issues?). " + err.Error(),
-			)
+			logger.DefaultLogger.Warning("Failed removing current file: " + err.Error())
 		}
 	}
 
@@ -154,6 +159,17 @@ func AutoUpdate(currentVersion string) error {
 	logger.DefaultLogger.Success("Update successful! Restart WPProbe to use the new version.")
 	exitFunc(0)
 	return nil
+}
+
+func CleanupOldBinary() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	_ = os.Remove(exe + ".old")
 }
 
 func detectOS() string { return runtime.GOOS }

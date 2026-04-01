@@ -36,6 +36,8 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
+	version.CleanupOldBinary()
+
 	_, isLatest := version.CheckLatestVersion(version.Version)
 	logger.DefaultLogger.PrintBanner(version.Version, isLatest)
 
