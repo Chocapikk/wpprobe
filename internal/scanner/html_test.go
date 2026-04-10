@@ -23,9 +23,10 @@ func sortedSlice(ss []string) []string {
 
 func TestExtractSlugsFromReader(t *testing.T) {
 	tests := []struct {
-		name      string
-		html      string
-		wantSlugs []string
+		name       string
+		html       string
+		wantSlugs  []string
+		wantThemes []string
 	}{
 		{
 			name: "Single plugin in href",
@@ -64,26 +65,67 @@ func TestExtractSlugsFromReader(t *testing.T) {
 			</body></html>`,
 			wantSlugs: []string{},
 		},
+		{
+			name: "Theme in inline style block",
+			html: `<html><head><style id="wp-webfonts-inline-css">
+				@font-face{font-family:"DM Sans";src:url('/wp-content/themes/twentytwentythree/assets/fonts/dm-sans/DMSans-Regular.woff2') format('woff2');}
+			</style></head><body></body></html>`,
+			wantThemes: []string{"twentytwentythree"},
+		},
+		{
+			name: "Theme in link attribute",
+			html: `<html><head>
+				<link rel="stylesheet" href="/wp-content/themes/flavor/style.css" />
+			</head><body></body></html>`,
+			wantThemes: []string{"flavor"},
+		},
+		{
+			name: "Plugins and themes mixed in attributes and text",
+			html: `<html><head>
+				<link rel="stylesheet" href="/wp-content/plugins/jetpack/css/style.css" />
+				<style>body{background:url('/wp-content/themes/flavor/img/bg.png')}</style>
+			</head><body>
+				<script src="/wp-content/plugins/woocommerce/js/app.js"></script>
+			</body></html>`,
+			wantSlugs:  []string{"jetpack", "woocommerce"},
+			wantThemes: []string{"flavor"},
+		},
+		{
+			name: "Plugin in inline script text",
+			html: `<html><body>
+				<script>var img = "/wp-content/plugins/hidden-plugin/img.png";</script>
+			</body></html>`,
+			wantSlugs: []string{"hidden-plugin"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dest := make(map[string]struct{})
+			plugins := make(map[string]struct{})
 			themes := make(map[string]struct{})
-			err := extractSlugsFromReader(strings.NewReader(tt.html), dest, themes)
+			err := extractSlugsFromReader(strings.NewReader(tt.html), plugins, themes)
 			if err != nil {
 				t.Fatalf("extractSlugsFromReader returned error: %v", err)
 			}
 
-			var got []string
-			for slug := range dest {
-				got = append(got, slug)
+			var gotPlugins []string
+			for slug := range plugins {
+				gotPlugins = append(gotPlugins, slug)
 			}
-			got = sortedSlice(got)
-			want := sortedSlice(tt.wantSlugs)
+			gotPlugins = sortedSlice(gotPlugins)
+			wantPlugins := sortedSlice(tt.wantSlugs)
+			if !reflect.DeepEqual(gotPlugins, wantPlugins) {
+				t.Errorf("plugins = %v, want %v", gotPlugins, wantPlugins)
+			}
 
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("extractSlugsFromReader = %v, want %v", got, want)
+			var gotThemes []string
+			for slug := range themes {
+				gotThemes = append(gotThemes, slug)
+			}
+			gotThemes = sortedSlice(gotThemes)
+			wantThemes := sortedSlice(tt.wantThemes)
+			if !reflect.DeepEqual(gotThemes, wantThemes) {
+				t.Errorf("themes = %v, want %v", gotThemes, wantThemes)
 			}
 		})
 	}

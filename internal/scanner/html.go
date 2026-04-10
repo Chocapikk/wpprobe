@@ -136,16 +136,23 @@ func extractSlugsFromReader(r io.Reader, pluginDest, themeDest map[string]struct
 			}
 			return z.Err()
 		}
-		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
-			continue
-		}
 
-		tok := z.Token()
-		for _, attr := range tok.Attr {
-			val := attr.Val
-			extractSlugFromPath(val, "wp-content/plugins/", pluginDest)
-			extractSlugFromPath(val, "wp-content/uploads/", pluginDest)
-			extractSlugFromPath(val, "wp-content/themes/", themeDest)
+		switch tt {
+		case html.StartTagToken, html.SelfClosingTagToken:
+			tok := z.Token()
+			for _, attr := range tok.Attr {
+				val := attr.Val
+				extractSlugFromPath(val, "wp-content/plugins/", pluginDest)
+				extractSlugFromPath(val, "wp-content/uploads/", pluginDest)
+				extractSlugFromPath(val, "wp-content/themes/", themeDest)
+			}
+		case html.TextToken:
+			text := string(z.Text())
+			if strings.Contains(text, "wp-content/") {
+				extractSlugFromPath(text, "wp-content/plugins/", pluginDest)
+				extractSlugFromPath(text, "wp-content/uploads/", pluginDest)
+				extractSlugFromPath(text, "wp-content/themes/", themeDest)
+			}
 		}
 	}
 }
