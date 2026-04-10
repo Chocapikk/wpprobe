@@ -130,7 +130,9 @@ func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 	stealthyResult := performStealthyScan(ctx)
 
 	if len(stealthyResult.Plugins) == 0 {
-		return performBruteforceScan(ctx)
+		bruteResult := performBruteforceScan(ctx)
+		bruteResult.Themes = stealthyResult.Themes
+		return bruteResult
 	}
 
 	finishProgressIfNeeded(ctx.Progress)
