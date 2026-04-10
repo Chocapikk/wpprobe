@@ -356,10 +356,6 @@ func appendVuln(vulns *VulnerabilitiesBySeverity, vuln Vulnerability, summary *V
 	}
 }
 
-func hasVulnerabilities(v *VulnerabilitiesBySeverity) bool {
-	return len(v.Critical) > 0 || len(v.High) > 0 || len(v.Medium) > 0 || len(v.Low) > 0
-}
-
 // UpdateDatabases updates both Wordfence and WPScan vulnerability databases.
 // WPScan update requires WPSCAN_API_TOKEN environment variable to be set.
 // Returns an error only if Wordfence update fails. WPScan update failures are ignored
