@@ -204,10 +204,6 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		cfg.Threads = 10
 	}
 
-	if cfg.PluginList == "" {
-		cfg.PluginList = "plugins.txt"
-	}
-
 	maxRedirects := cfg.MaxRedirects
 	if maxRedirects == 0 {
 		maxRedirects = -1 // Use default if not set
@@ -380,10 +376,10 @@ func UpdateDatabases() error {
 	if err := wordfence.UpdateWordfence(); err != nil {
 		return err
 	}
-	
+
 	// WPScan update is optional - try it but don't fail if it errors
 	_ = wpscan.UpdateWPScan()
-	
+
 	return nil
 }
 
@@ -410,4 +406,3 @@ func DatabaseExists() bool {
 	_, err = os.Stat(filePath)
 	return err == nil
 }
-
