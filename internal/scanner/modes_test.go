@@ -23,18 +23,18 @@ func newFakeWPServer(themes []string, plugins []string) *httptest.Server {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/wp-json" || r.URL.RawQuery == "rest_route=/" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"routes":{}}`)
+			_, _ = fmt.Fprint(w, `{"routes":{}}`)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	})
 
 	mux.HandleFunc("/feed/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "<html></html>")
+		_, _ = fmt.Fprint(w, "<html></html>")
 	})
 	mux.HandleFunc("/wp-content/uploads/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "<html></html>")
+		_, _ = fmt.Fprint(w, "<html></html>")
 	})
 	mux.HandleFunc("/wp-content/", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
