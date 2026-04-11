@@ -204,10 +204,6 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		cfg.Threads = 10
 	}
 
-	if cfg.PluginList == "" {
-		cfg.PluginList = "plugins.txt"
-	}
-
 	maxRedirects := cfg.MaxRedirects
 	if maxRedirects == 0 {
 		maxRedirects = -1 // Use default if not set
@@ -272,6 +268,35 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 			continue
 		}
 
+		if entry.SoftwareType == "theme" {
+			if _, exists := themeMap[entry.Slug]; !exists {
+				themeMap[entry.Slug] = &ThemeResult{
+					Name:    entry.Slug,
+					Version: entry.Version,
+					Vulnerabilities: VulnerabilitiesBySeverity{
+						Critical: make([]Vulnerability, 0, 4),
+						High:     make([]Vulnerability, 0, 4),
+						Medium:   make([]Vulnerability, 0, 4),
+						Low:      make([]Vulnerability, 0, 4),
+					},
+				}
+			}
+		} else {
+			if _, exists := pluginMap[entry.Slug]; !exists {
+				pluginMap[entry.Slug] = &PluginResult{
+					Name:       entry.Slug,
+					Version:    entry.Version,
+					Confidence: 100.0,
+					Vulnerabilities: VulnerabilitiesBySeverity{
+						Critical: make([]Vulnerability, 0, 4),
+						High:     make([]Vulnerability, 0, 4),
+						Medium:   make([]Vulnerability, 0, 4),
+						Low:      make([]Vulnerability, 0, 4),
+					},
+				}
+			}
+		}
+
 		cve := ""
 		if len(entry.CVEs) > 0 {
 			cve = entry.CVEs[0]
@@ -297,50 +322,17 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 		}
 
 		if entry.SoftwareType == "theme" {
-			theme, exists := themeMap[entry.Slug]
-			if !exists {
-				theme = &ThemeResult{
-					Name:    entry.Slug,
-					Version: entry.Version,
-					Vulnerabilities: VulnerabilitiesBySeverity{
-						Critical: make([]Vulnerability, 0, 4),
-						High:     make([]Vulnerability, 0, 4),
-						Medium:   make([]Vulnerability, 0, 4),
-						Low:      make([]Vulnerability, 0, 4),
-					},
-				}
-				themeMap[entry.Slug] = theme
-			}
-			appendVuln(&theme.Vulnerabilities, vuln, &result.Summary)
+			appendVuln(&themeMap[entry.Slug].Vulnerabilities, vuln, &result.Summary)
 		} else {
-			plugin, exists := pluginMap[entry.Slug]
-			if !exists {
-				plugin = &PluginResult{
-					Name:       entry.Slug,
-					Version:    entry.Version,
-					Confidence: 100.0,
-					Vulnerabilities: VulnerabilitiesBySeverity{
-						Critical: make([]Vulnerability, 0, 4),
-						High:     make([]Vulnerability, 0, 4),
-						Medium:   make([]Vulnerability, 0, 4),
-						Low:      make([]Vulnerability, 0, 4),
-					},
-				}
-				pluginMap[entry.Slug] = plugin
-			}
-			appendVuln(&plugin.Vulnerabilities, vuln, &result.Summary)
+			appendVuln(&pluginMap[entry.Slug].Vulnerabilities, vuln, &result.Summary)
 		}
 	}
 
 	for _, p := range pluginMap {
-		if hasVulnerabilities(&p.Vulnerabilities) {
-			result.Plugins = append(result.Plugins, *p)
-		}
+		result.Plugins = append(result.Plugins, *p)
 	}
 	for _, t := range themeMap {
-		if hasVulnerabilities(&t.Vulnerabilities) {
-			result.Themes = append(result.Themes, *t)
-		}
+		result.Themes = append(result.Themes, *t)
 	}
 
 	result.TotalVulnerabilities = result.Summary.Critical + result.Summary.High + result.Summary.Medium + result.Summary.Low
@@ -364,10 +356,6 @@ func appendVuln(vulns *VulnerabilitiesBySeverity, vuln Vulnerability, summary *V
 	}
 }
 
-func hasVulnerabilities(v *VulnerabilitiesBySeverity) bool {
-	return len(v.Critical) > 0 || len(v.High) > 0 || len(v.Medium) > 0 || len(v.Low) > 0
-}
-
 // UpdateDatabases updates both Wordfence and WPScan vulnerability databases.
 // WPScan update requires WPSCAN_API_TOKEN environment variable to be set.
 // Returns an error only if Wordfence update fails. WPScan update failures are ignored
@@ -384,10 +372,10 @@ func UpdateDatabases() error {
 	if err := wordfence.UpdateWordfence(); err != nil {
 		return err
 	}
-	
+
 	// WPScan update is optional - try it but don't fail if it errors
 	_ = wpscan.UpdateWPScan()
-	
+
 	return nil
 }
 
@@ -414,4 +402,3 @@ func DatabaseExists() bool {
 	_, err = os.Stat(filePath)
 	return err == nil
 }
-
