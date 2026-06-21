@@ -293,6 +293,41 @@ func (h *HTTPClientManager) GetStatusAndBody(ctx context.Context, url string) (i
 	return resp.StatusCode, string(data), nil
 }
 
+// ProbeNoRedirect sends a GET request WITHOUT following redirects and returns
+// the raw status code together with a short prefix of the response body.
+//
+// Not following redirects is intentional: when probing whether a plugin file
+// exists on disk, a 3xx is itself a meaningful signal. WordPress' own rewrite
+// rules send any request for a non-existent path to index.php, where it is
+// answered by the application (often a canonical 301 to "<path>/" or a 404),
+// whereas a file that exists is served (or executed) directly. The body prefix
+// lets a caller fingerprint soft-404 servers that answer 200 to everything.
+// The read is capped at maxBytes to avoid downloading a full 404 page per probe.
+func (h *HTTPClientManager) ProbeNoRedirect(ctx context.Context, url string, maxBytes int) (int, string, error) {
+	// Transport.RoundTrip does not honour the client-level timeout, so cap it
+	// here to avoid a hung probe blocking a worker indefinitely.
+	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := h.newRequest(reqCtx, "GET", url)
+	if err != nil {
+		return 0, "", err
+	}
+	resp, err := h.client.Transport.RoundTrip(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, "", ctx.Err()
+		}
+		return 0, "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	limited := io.LimitReader(resp.Body, int64(maxBytes))
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return resp.StatusCode, "", err
+	}
+	return resp.StatusCode, string(data), nil
+}
+
 // GetPartialWithContext sends a GET request and reads at most maxBytes of the response body.
 // Useful for fetching just the header portion of large files (e.g. CSS theme version).
 func (h *HTTPClientManager) GetPartialWithContext(ctx context.Context, url string, maxBytes int) (string, error) {

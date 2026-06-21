@@ -42,11 +42,11 @@ type ScanOptions struct {
 	PluginList     string
 	Headers        []string
 	Proxy          string
-	RateLimit      int                  // Requests per second (0 = unlimited)
-	MaxRedirects   int                  // Maximum redirects to follow (0 = disable, -1 = default: 10)
-	Context        context.Context      // Context for cancellation
-	HTTPClient     *http.Client         // External HTTP client (optional, for connection pooling)
-	SharedLimiter  *wphttp.RateLimiter  // Global rate limiter shared across all targets
+	RateLimit      int                                      // Requests per second (0 = unlimited)
+	MaxRedirects   int                                      // Maximum redirects to follow (0 = disable, -1 = default: 10)
+	Context        context.Context                          // Context for cancellation
+	HTTPClient     *http.Client                             // External HTTP client (optional, for connection pooling)
+	SharedLimiter  *wphttp.RateLimiter                      // Global rate limiter shared across all targets
 	NewProgress    func(total int, message string) Progress // Factory for creating progress bars (CLI only)
 	DisplayFunc    func(DisplayResultsContext)              // Callback for displaying results (CLI only)
 }
@@ -135,12 +135,12 @@ type BruteforceRequest struct {
 
 // HybridScanRequest contains request parameters for hybrid scan operations.
 type HybridScanRequest struct {
-	Target           string
-	StealthyPlugins  []string
+	Target            string
+	StealthyPlugins   []string
 	BruteforcePlugins []string
-	Threads          int
-	Progress         Progress
-	HTTP             wphttp.Config
+	Threads           int
+	Progress          Progress
+	HTTP              wphttp.Config
 }
 
 // BruteforceContext contains context for bruteforce operations.
@@ -153,6 +153,14 @@ type BruteforceContext struct {
 	Versions *map[string]string
 	Ctx      context.Context
 	Client   *wphttp.HTTPClientManager
+	// Fingerprints maps a plugin slug to the ordered list of files to probe
+	// (e.g. "woocommerce.php", "readme.txt"). The plugin is present on disk when
+	// any of them returns a response that differs from the calibrated miss
+	// baseline, even if it is installed but not activated.
+	Fingerprints map[string][]string
+	// Calibrator holds the per-target "not found" baseline so that file
+	// detection works regardless of the web server (Apache/nginx) and its config.
+	Calibrator *Calibrator
 }
 
 // VulnerabilityCheckRequest contains request parameters for checking vulnerabilities.
@@ -236,4 +244,3 @@ type DisplayResultsContext struct {
 	Opts      ScanOptions
 	Progress  Progress
 }
-

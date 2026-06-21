@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -89,6 +90,54 @@ func TestLoadPluginEndpointsFromData(t *testing.T) {
 	}
 }
 
+func TestLoadPluginFingerprints(t *testing.T) {
+	fp, err := LoadPluginFingerprints()
+	if err != nil {
+		t.Fatalf("LoadPluginFingerprints() error = %v", err)
+	}
+	if len(fp) < 5000 {
+		t.Fatalf("expected at least 5000 fingerprinted plugins, got %d", len(fp))
+	}
+
+	// Each line is "slug/file"; the slug key must not contain a slash and every
+	// candidate file must be a non-empty relative path.
+	wantContains := map[string][]string{
+		"woocommerce":    {"woocommerce.php", "readme.txt"},
+		"wordpress-seo":  {"index.php", "readme.txt"},
+		"wp-user-avatar": {"wp-user-avatar.php", "readme.txt"},
+	}
+	for slug, expected := range wantContains {
+		files, ok := fp[slug]
+		if !ok {
+			t.Errorf("expected fingerprint entry for %q, none found", slug)
+			continue
+		}
+		for _, want := range expected {
+			if !slices.Contains(files, want) {
+				t.Errorf("fingerprint for %q = %v, missing file %q", slug, files, want)
+			}
+		}
+	}
+
+	// Sanity: no empty file entries and no slug carried its slash separator.
+	for slug, files := range fp {
+		if slug == "" {
+			t.Errorf("found empty slug key")
+		}
+		for _, f := range files {
+			if f == "" {
+				t.Errorf("slug %q has an empty candidate file", slug)
+			}
+		}
+	}
+
+	// The list is cached, so a second call returns a map of the same size.
+	fp2, _ := LoadPluginFingerprints()
+	if len(fp) != len(fp2) {
+		t.Errorf("cached fingerprints differ in size: %d vs %d", len(fp), len(fp2))
+	}
+}
+
 func mapsEqual(a, b map[string][]string) bool {
 	if a == nil && b == nil {
 		return true
@@ -118,4 +167,3 @@ func slicesEqual(a, b []string) bool {
 	}
 	return true
 }
-

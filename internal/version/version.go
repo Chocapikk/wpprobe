@@ -90,19 +90,6 @@ func GetPluginVersionWithClient(ctx context.Context, client *http.HTTPClientMana
 	return fetchVersionFromReadme(ctx, client, target, plugin)
 }
 
-// CheckPluginExists checks if a plugin directory exists via GET request.
-// Returns true if the server responds with 403 (directory exists but listing forbidden)
-// or 200 with a directory listing containing readme.txt (avoids false positives from
-// WordPress instances that return 200 for everything).
-func CheckPluginExists(ctx context.Context, client *http.HTTPClientManager, target, plugin string) bool {
-	url := target + "/wp-content/plugins/" + plugin + "/"
-	status, body, err := client.GetStatusAndBody(ctx, url)
-	if err != nil {
-		return false
-	}
-	return status == 403 || (status == 200 && strings.Contains(strings.ToLower(body), "readme.txt"))
-}
-
 func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager, target, plugin string) string {
 	base := target + "/wp-content/plugins/" + plugin + "/"
 	for _, name := range readmeNames {

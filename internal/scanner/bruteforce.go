@@ -44,6 +44,15 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 	normalized := http.NormalizeURL(req.Target)
 	sharedClient := req.HTTP.NewClient(10 * time.Second)
 	sharedClient.EnableKeepAlives(req.Threads)
+
+	fingerprints, err := LoadPluginFingerprints()
+	if err != nil {
+		logger.DefaultLogger.Warning(
+			"Failed to load plugin fingerprints, falling back to directory probing: " + err.Error(),
+		)
+		fingerprints = map[string][]string{}
+	}
+
 	detected := make([]string, 0, len(req.Plugins)/10)
 	versions := make(map[string]string)
 	var mu sync.Mutex
@@ -65,6 +74,10 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 		signal.Stop(sigChan)
 	}()
 
+	// Learn what a request for a non-existent plugin file looks like on this
+	// target, so detection works regardless of the web server and its config.
+	calibrator := NewCalibrator(ctx, sharedClient, normalized)
+
 	bruteCtx := BruteforceContext{
 		ScanContext: ScanContext{
 			Target:   normalized,
@@ -72,13 +85,15 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 			HTTP:     req.HTTP,
 			Progress: req.Progress,
 		},
-		Mu:       &mu,
-		Wg:       &wg,
-		Sem:      sem,
-		Detected: &detected,
-		Versions: &versions,
-		Ctx:      ctx,
-		Client:   sharedClient,
+		Mu:           &mu,
+		Wg:           &wg,
+		Sem:          sem,
+		Detected:     &detected,
+		Versions:     &versions,
+		Ctx:          ctx,
+		Client:       sharedClient,
+		Fingerprints: fingerprints,
+		Calibrator:   calibrator,
 	}
 
 pluginLoop:
@@ -169,8 +184,11 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 		ctx.Progress.SetMessage(fmt.Sprintf("Bruteforcing plugin %-30.30s", plugin))
 	}
 
-	// Phase 1: quick HEAD check on plugin directory (403/200 = exists, 404 = skip)
-	if !version.CheckPluginExists(ctx.Ctx, ctx.Client, ctx.Target, plugin) {
+	// Phase 1: confirm the plugin is present on disk by probing the files it
+	// ships (issue #27). A response that differs from the calibrated miss
+	// baseline confirms the plugin, even when it is installed but not activated
+	// (which the stealthy scan misses) and regardless of the web server config.
+	if !probePluginFiles(ctx, plugin, candidateFiles(plugin, ctx.Fingerprints)) {
 		incrementProgress(ctx.Progress)
 		return
 	}
@@ -189,6 +207,46 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 
 	recordPluginFound(plugin, ver, ctx)
 	incrementProgress(ctx.Progress)
+}
+
+// candidateFiles returns the files to probe for a plugin slug: the curated
+// fingerprint from the wordlist when one exists, otherwise a generic set
+// covering the files almost every plugin ships (its main file, readme.txt and
+// the "silence is golden" index.php). This lets a user pass a plain slug list
+// (the historical --plugin-list format) without needing to know about per-file
+// paths: the paths are reconstructed from the slug.
+func candidateFiles(plugin string, fingerprints map[string][]string) []string {
+	if files := fingerprints[plugin]; len(files) > 0 {
+		return files
+	}
+	return []string{plugin + ".php", "readme.txt", "index.php"}
+}
+
+// probePluginFiles probes each candidate file for a plugin in priority order and
+// returns true on the first response that differs from the target's calibrated
+// "not found" baseline. Comparing against the baseline (instead of hardcoding
+// "200 = found") is what makes detection reliable regardless of the web server:
+// a file that exists is served (200) or executed (empty 200) or access-denied
+// (403), all of which differ from how the host answers a missing path (a
+// WordPress 301/404, or a soft-404 page). Requests do not follow redirects, so a
+// canonical 301 to "<path>/" is seen as the miss signal it is.
+func probePluginFiles(ctx BruteforceContext, plugin string, files []string) bool {
+	base := ctx.Target + "/wp-content/plugins/" + plugin + "/"
+	for _, f := range files {
+		select {
+		case <-ctx.Ctx.Done():
+			return false
+		default:
+		}
+		status, body, err := ctx.Client.ProbeNoRedirect(ctx.Ctx, base+f, probeBodyCap)
+		if err != nil {
+			continue
+		}
+		if ctx.Calibrator.IsInstalled(status, body) {
+			return true
+		}
+	}
+	return false
 }
 
 func recordPluginFound(plugin, ver string, ctx BruteforceContext) {

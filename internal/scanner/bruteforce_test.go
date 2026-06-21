@@ -17,25 +17,27 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package file
+package scanner
 
-import (
-	"embed"
+import "testing"
 
-	"github.com/Chocapikk/wpprobe/internal/logger"
-)
-
-//go:embed files/scanned_plugins.json
-//go:embed files/wordpress_plugins.txt
-//go:embed files/plugin_fingerprints.txt
-
-var embeddedFiles embed.FS
-
-func GetEmbeddedFile(filename string) ([]byte, error) {
-	data, err := embeddedFiles.ReadFile(filename)
-	if err != nil {
-		logger.DefaultLogger.Error("Failed to read embedded file: " + err.Error())
-		return nil, err
+// candidateFiles must use the curated fingerprint when present, and otherwise
+// reconstruct a generic set from the slug, so a plain slug list keeps working.
+func TestCandidateFiles(t *testing.T) {
+	fingerprints := map[string][]string{
+		"woocommerce": {"woocommerce.php", "readme.txt"},
 	}
-	return data, nil
+
+	if got := candidateFiles("woocommerce", fingerprints); !slicesEqual(got, []string{"woocommerce.php", "readme.txt"}) {
+		t.Errorf("curated slug: got %v", got)
+	}
+
+	want := []string{"some-obscure-plugin.php", "readme.txt", "index.php"}
+	if got := candidateFiles("some-obscure-plugin", fingerprints); !slicesEqual(got, want) {
+		t.Errorf("generic reconstruction: got %v, want %v", got, want)
+	}
+
+	if got := candidateFiles("anything", nil); !slicesEqual(got, []string{"anything.php", "readme.txt", "index.php"}) {
+		t.Errorf("nil fingerprints: got %v", got)
+	}
 }
