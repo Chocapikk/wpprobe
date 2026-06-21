@@ -21,9 +21,11 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,6 +37,7 @@ import (
 // readme -> 301) and the responses a real, served or hardened file produces.
 func TestCalibratorIsInstalled(t *testing.T) {
 	c := &Calibrator{
+		missStatuses: map[int]struct{}{404: {}, 301: {}},
 		missSigs: map[responseSig]struct{}{
 			signature(404, "nginx not found"): {},
 			signature(301, ""):                {},
@@ -102,30 +105,54 @@ func TestNewCalibratorApacheStyle(t *testing.T) {
 	}
 }
 
-// A 404 page that echoes the requested path yields different bodies per slug;
-// the calibrator must downgrade that status to status-only matching so it does
-// not mistake every miss for a hit.
-func TestNewCalibratorEchoingNotFound(t *testing.T) {
+// A soft-404 host (200 for everything) whose page carries a per-request token
+// (timestamp, cache buster) must not produce false positives: after body
+// normalization the changing digits collapse, so a non-installed plugin still
+// matches the calibrated miss, while a real served file is still a hit.
+func TestNewCalibratorDynamicNotFound(t *testing.T) {
+	var n int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "wpprobe-calib") {
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte("Not found: " + r.URL.Path)) // echoes the path
+		if strings.Contains(r.URL.Path, "this-is-a-real-plugin") {
+			_, _ = w.Write([]byte("=== Real Plugin ===\nStable tag: 1.2.3\nContributors: someone\n"))
 			return
 		}
-		_, _ = w.Write([]byte("real served content"))
+		i := atomic.AddInt64(&n, 1)
+		_, _ = fmt.Fprintf(w, "<!DOCTYPE html><html><head><title>Page not found</title></head><body>error ref %d at 170000%d</body></html>", i, i)
 	}))
 	defer srv.Close()
 
 	client := wphttp.NewHTTPClient(5*time.Second, nil, "", 0, 0)
 	c := NewCalibrator(context.Background(), client, srv.URL)
 
-	if _, ok := c.missStatusOnly[http.StatusNotFound]; !ok {
-		t.Fatal("an echoing 404 should be tracked as a status-only miss")
+	if _, ok := c.missStatusOnly[http.StatusOK]; ok {
+		t.Fatal("normalized dynamic page should be stable, not status-only")
 	}
-	if c.IsInstalled(404, "Not found: /anything/else") {
-		t.Error("any 404 must be a miss once the status is echo-detected")
+	missWithOtherToken := "<!DOCTYPE html><html><head><title>Page not found</title></head><body>error ref 9999 at 17000099999</body></html>"
+	if c.IsInstalled(http.StatusOK, missWithOtherToken) {
+		t.Error("a dynamic soft-404 page must be a miss, not a false positive")
 	}
-	if !c.IsInstalled(200, "real served content") {
-		t.Error("a served 200 must be installed")
+	if !c.IsInstalled(http.StatusOK, "=== Real Plugin ===\nStable tag: 1.2.3\nContributors: someone\n") {
+		t.Error("a served plugin file must be a hit")
+	}
+}
+
+// A soft-404 host (200 for everything) that echoes the requested path makes
+// every probe body different, even after normalization. The ambiguous 200
+// status must be downgraded to status-only so detection stays conservative (a
+// miss) instead of flagging every probe as a hit.
+func TestNewCalibratorEchoingNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html><body>Nothing here at " + r.URL.Path + "</body></html>"))
+	}))
+	defer srv.Close()
+
+	client := wphttp.NewHTTPClient(5*time.Second, nil, "", 0, 0)
+	c := NewCalibrator(context.Background(), client, srv.URL)
+
+	if _, ok := c.missStatusOnly[http.StatusOK]; !ok {
+		t.Fatal("an echoing soft-404 (200) should be tracked as a status-only miss")
+	}
+	if c.IsInstalled(http.StatusOK, "<html><body>Nothing here at /whatever</body></html>") {
+		t.Error("an echoing soft-404 200 must be treated as a miss")
 	}
 }
