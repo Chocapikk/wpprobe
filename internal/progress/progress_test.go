@@ -20,12 +20,30 @@
 package progress
 
 import (
+	"bytes"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
+
+// writeAboveBar must clear the whole current line before printing, so a log line
+// lands on its own clean line instead of being glued to the end of the bar.
+func TestWriteAboveBar(t *testing.T) {
+	var buf bytes.Buffer
+	if _, err := writeAboveBar(&buf, "hello world"); err != nil {
+		t.Fatalf("writeAboveBar error: %v", err)
+	}
+	got := buf.String()
+	if !strings.HasPrefix(got, "\r\033[2K") {
+		t.Errorf("output must start by clearing the line, got %q", got)
+	}
+	if !strings.HasSuffix(got, "hello world\n") {
+		t.Errorf("output must end with the message and a newline, got %q", got)
+	}
+}
 
 func TestNewProgressBar(t *testing.T) {
 	pm := NewProgressBar(10, "Testing Progress Bar")

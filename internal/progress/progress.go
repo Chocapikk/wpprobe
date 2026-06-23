@@ -21,6 +21,7 @@ package progress
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -120,11 +121,30 @@ func (p *ProgressManager) Write(data []byte) (int, error) {
 	return n, nil
 }
 
-// Bprintln prints a message on a new line above the bar.
+// Bprintln prints a message on its own clean line above the bar, then redraws
+// the bar. We do not delegate to progressbar.Bprintln because its clear is a
+// no-op until the bar has measured its width, which races the throttled render
+// and leaves the message glued to the end of the bar line.
 func (p *ProgressManager) Bprintln(a ...interface{}) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return progressbar.Bprintln(p.bar, a...)
+	n, err := writeAboveBar(ansi.NewAnsiStderr(), a...)
+	if err != nil {
+		return n, err
+	}
+	_ = p.bar.RenderBlank()
+	return n, nil
+}
+
+// writeAboveBar clears the whole current line unconditionally, then prints the
+// message followed by a newline, so a log line lands on its own clean line
+// instead of being appended to the bar. Split out from Bprintln to be testable
+// without a real terminal.
+func writeAboveBar(w io.Writer, a ...interface{}) (int, error) {
+	if _, err := fmt.Fprint(w, "\r\033[2K"); err != nil {
+		return 0, err
+	}
+	return fmt.Fprintln(w, a...)
 }
 
 // Bprintf prints a formatted message above the bar.
