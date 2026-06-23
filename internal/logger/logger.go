@@ -98,6 +98,13 @@ func FormatSuccess(msg string) string {
 	return formatTime() + " [" + colorize(ansiSuccess, "SUCCESS") + "] " + msg
 }
 
+// FormatWarning returns a formatted warning message string without printing it,
+// so callers can route it through an active progress bar (which otherwise eats a
+// plain logger write) instead of the logger.
+func FormatWarning(msg string) string {
+	return formatTime() + " [" + colorize(ansiWarning, "WARNING") + "] " + msg
+}
+
 func (l *Logger) PrintBanner(version string, isLatest bool) {
 	status := colorize(ansiError+ansiBold, "outdated")
 	if isLatest {
