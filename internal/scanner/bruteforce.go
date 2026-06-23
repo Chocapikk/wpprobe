@@ -55,6 +55,7 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 
 	detected := make([]string, 0, len(req.Plugins)/10)
 	versions := make(map[string]string)
+	forbidden := make([]string, 0)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, req.Threads)
@@ -90,6 +91,7 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 		Sem:          sem,
 		Detected:     &detected,
 		Versions:     &versions,
+		Forbidden:    &forbidden,
 		Ctx:          ctx,
 		Client:       sharedClient,
 		Fingerprints: fingerprints,
@@ -131,6 +133,10 @@ pluginLoop:
 	} else {
 		wg.Wait()
 	}
+
+	// All probes are in; now that we can see how many slugs matched only via a
+	// 403, decide whether they are real hardened plugins or WAF noise (issue #27).
+	reconcileForbidden(bruteCtx, forbidden)
 
 	return detected, versions
 }
@@ -188,7 +194,22 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 	// ships (issue #27). A response that differs from the calibrated miss
 	// baseline confirms the plugin, even when it is installed but not activated
 	// (which the stealthy scan misses) and regardless of the web server config.
-	if !probePluginFiles(ctx, plugin, candidateFiles(plugin, ctx.Fingerprints)) {
+	found, status := probePluginFiles(ctx, plugin, candidateFiles(plugin, ctx.Fingerprints))
+	if !found {
+		incrementProgress(ctx.Progress)
+		return
+	}
+
+	// A bare 403 is ambiguous: a plugin hardened with its own .htaccess and a WAF
+	// forbidding the slug for a plugin that is NOT installed look identical here
+	// (both forbid every file under <slug>/). Hold it and let reconcileForbidden
+	// decide in aggregate after the scan, a few are kept as real hardened plugins,
+	// an epidemic is suppressed as a WAF (issue #27). Version resolution is
+	// deferred to the survivors so a WAF flood costs no extra readme.txt fetches.
+	if status == 403 && ctx.Forbidden != nil {
+		ctx.Mu.Lock()
+		*ctx.Forbidden = append(*ctx.Forbidden, plugin)
+		ctx.Mu.Unlock()
 		incrementProgress(ctx.Progress)
 		return
 	}
@@ -223,19 +244,22 @@ func candidateFiles(plugin string, fingerprints map[string][]string) []string {
 }
 
 // probePluginFiles probes each candidate file for a plugin in priority order and
-// returns true on the first response that differs from the target's calibrated
-// "not found" baseline. Comparing against the baseline (instead of hardcoding
-// "200 = found") is what makes detection reliable regardless of the web server:
-// a file that exists is served (200) or executed (empty 200) or access-denied
-// (403), all of which differ from how the host answers a missing path (a
-// WordPress 301/404, or a soft-404 page). Requests do not follow redirects, so a
-// canonical 301 to "<path>/" is seen as the miss signal it is.
-func probePluginFiles(ctx BruteforceContext, plugin string, files []string) bool {
+// returns true (with the confirming HTTP status) on the first response that
+// differs from the target's calibrated "not found" baseline. Comparing against
+// the baseline (instead of hardcoding "200 = found") is what makes detection
+// reliable regardless of the web server: a file that exists is served (200) or
+// executed (empty 200) or access-denied (403), all of which differ from how the
+// host answers a missing path (a WordPress 301/404, or a soft-404 page).
+// Requests do not follow redirects, so a canonical 301 to "<path>/" is seen as
+// the miss signal it is. The confirming status is returned so the caller can
+// treat a bare 403 (ambiguous between a hardened plugin and a WAF) differently
+// from a served response (issue #27).
+func probePluginFiles(ctx BruteforceContext, plugin string, files []string) (bool, int) {
 	base := ctx.Target + "/wp-content/plugins/" + plugin + "/"
 	for _, f := range files {
 		select {
 		case <-ctx.Ctx.Done():
-			return false
+			return false, 0
 		default:
 		}
 		status, body, err := ctx.Client.ProbeNoRedirect(ctx.Ctx, base+f, probeBodyCap)
@@ -243,10 +267,10 @@ func probePluginFiles(ctx BruteforceContext, plugin string, files []string) bool
 			continue
 		}
 		if ctx.Calibrator.IsInstalled(status, body) {
-			return true
+			return true, status
 		}
 	}
-	return false
+	return false, 0
 }
 
 func recordPluginFound(plugin, ver string, ctx BruteforceContext) {
@@ -261,4 +285,44 @@ func recordPluginFound(plugin, ver string, ctx BruteforceContext) {
 	*ctx.Detected = append(*ctx.Detected, plugin)
 	(*ctx.Versions)[plugin] = ver
 	ctx.Mu.Unlock()
+}
+
+// forbiddenWAFThreshold is the number of 403-only matches above which they are
+// treated as a WAF or global 403 policy rather than real .htaccess-hardened
+// plugins, and suppressed. A normal host rarely hardens more than a handful of
+// individual plugins this way, and a blanket deny over the whole plugins
+// directory is already absorbed by calibration (the random calibration probes
+// get the same 403, so it becomes the miss baseline). A host that forbids more
+// distinct slugs than this is filtering by name/pattern, not running them all
+// (issue #27).
+const forbiddenWAFThreshold = 5
+
+// reconcileForbidden decides what to do with the slugs that matched only via a
+// 403, now that the whole scan is done and their count is known. At or below the
+// threshold they are plausibly real plugins hardened with their own .htaccess and
+// are reported (resolving each version now, which a streaming hit would have done
+// inline). Above it, the host is forbidding plugin paths wholesale, so they are
+// dropped with a single warning instead of flooding the output with false
+// positives (issue #27). The count of dropped matches is logged, never silently
+// swallowed.
+func reconcileForbidden(ctx BruteforceContext, forbidden []string) {
+	if len(forbidden) == 0 {
+		return
+	}
+	if len(forbidden) > forbiddenWAFThreshold {
+		logger.DefaultLogger.Warning(fmt.Sprintf(
+			"Suppressed %d plugin(s) that matched only with a 403: this host returns 403 for many plugin paths (likely a WAF or a global policy), so they are not reported as installed (issue #27).",
+			len(forbidden)))
+		return
+	}
+	for _, plugin := range forbidden {
+		if ctx.Ctx.Err() != nil {
+			return
+		}
+		ver := version.GetPluginVersionWithClient(ctx.Ctx, ctx.Client, ctx.Target, plugin)
+		if ver == "" || ver == "unknown" {
+			ver = "unknown"
+		}
+		recordPluginFound(plugin, ver, ctx)
+	}
 }

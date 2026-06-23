@@ -151,8 +151,14 @@ type BruteforceContext struct {
 	Sem      chan struct{}
 	Detected *[]string
 	Versions *map[string]string
-	Ctx      context.Context
-	Client   *wphttp.HTTPClientManager
+	// Forbidden collects slugs that matched ONLY via a 403 response. A bare 403 is
+	// ambiguous: a plugin hardened with its own .htaccess and a WAF blocking the
+	// slug for a plugin that is NOT installed look identical here (both forbid
+	// every file under <slug>/). These are held and reconciled in aggregate after
+	// the scan instead of being reported as confirmed installs (issue #27).
+	Forbidden *[]string
+	Ctx       context.Context
+	Client    *wphttp.HTTPClientManager
 	// Fingerprints maps a plugin slug to the ordered list of files to probe
 	// (e.g. "woocommerce.php", "readme.txt"). The plugin is present on disk when
 	// any of them returns a response that differs from the calibrated miss
