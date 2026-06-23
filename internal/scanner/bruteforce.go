@@ -311,7 +311,7 @@ func reconcileForbidden(ctx BruteforceContext, forbidden []string) {
 	}
 	if len(forbidden) > forbiddenWAFThreshold {
 		msg := fmt.Sprintf(
-			"Suppressed %d plugin(s) that matched only with a 403: this host returns 403 for many plugin paths (likely a WAF or a global policy), so they are not reported as installed (issue #27).",
+			"Suppressed %d plugin(s) that matched only with a 403: this host returns 403 for many plugin paths (likely a WAF or a global policy), so they are not reported as installed.",
 			len(forbidden))
 		// Route through the progress bar when one is active, otherwise it eats a
 		// plain logger write and the suppression goes unexplained (issue #27).
