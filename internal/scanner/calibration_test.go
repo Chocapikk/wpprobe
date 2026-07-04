@@ -136,6 +136,41 @@ func TestNewCalibratorDynamicNotFound(t *testing.T) {
 	}
 }
 
+// A redirect must never count as "installed", even when the calibrated miss
+// baseline uses a different status (e.g. 404). This covers hosts where a WAF
+// or reverse proxy returns 301/302 for specific plugin slugs while calibration
+// saw only 404 (issue #27, corvuspay false positive).
+func TestCalibratorRedirectNeverInstalled(t *testing.T) {
+	c := &Calibrator{
+		missStatuses:   map[int]struct{}{404: {}},
+		missSigs:       map[responseSig]struct{}{signature(404, "not found"): {}},
+		missStatusOnly: map[int]struct{}{},
+		available:      true,
+	}
+	for _, status := range []int{301, 302, 303, 307, 308} {
+		if c.IsInstalled(status, "") {
+			t.Errorf("redirect %d must never be considered installed", status)
+		}
+	}
+	if !c.IsInstalled(200, "plugin content") {
+		t.Error("200 must still be installed")
+	}
+	if !c.IsInstalled(403, "denied") {
+		t.Error("403 must still be installed")
+	}
+}
+
+// Redirect must be rejected even when calibration failed (fallback mode).
+func TestCalibratorRedirectFallback(t *testing.T) {
+	c := &Calibrator{available: false}
+	if c.IsInstalled(301, "") {
+		t.Error("301 must not be installed in fallback mode")
+	}
+	if c.IsInstalled(302, "") {
+		t.Error("302 must not be installed in fallback mode")
+	}
+}
+
 // A soft-404 host (200 for everything) that echoes the requested path makes
 // every probe body different, even after normalization. The ambiguous 200
 // status must be downgraded to status-only so detection stays conservative (a

@@ -254,9 +254,16 @@ func NewCalibrator(ctx context.Context, client *http.HTTPClientManager, target s
 // IsInstalled reports whether a probe response indicates the file exists on
 // disk, i.e. its signature does not match any calibrated miss.
 func (c *Calibrator) IsInstalled(status int, body string) bool {
+	// A redirect is never a served file: the web server is rerouting the
+	// request, not serving content from the plugin directory. This catches
+	// hosts where calibration returns 404 but a WAF or reverse proxy returns
+	// 301/302 for specific plugin slugs (issue #27).
+	if status >= 300 && status < 400 {
+		return false
+	}
 	if !c.available {
 		// Calibration failed (e.g. target unreachable during calibration): fall
-		// back to "served or hardened" — a file that is served (200) or exists
+		// back to "served or hardened" - a file that is served (200) or exists
 		// but is access-denied (403).
 		return status == 200 || status == 403
 	}

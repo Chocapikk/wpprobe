@@ -114,6 +114,51 @@ func TestBruteforcePluginsWAFForbiddenSuppressed(t *testing.T) {
 	}
 }
 
+// A WAF/reverse proxy that returns 301 for specific plugin slugs while the
+// calibration baseline is 404 must not produce false positives. This is the
+// exact scenario from issue #27 (corvuspay-woocommerce-integration FP).
+func TestBruteforcePluginsRedirectNotDetected(t *testing.T) {
+	installed := "contact-form-7"
+	redirected := []string{"corvuspay-woocommerce-integration", "some-other-plugin"}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		if strings.Contains(p, installed) {
+			if strings.HasSuffix(p, "readme.txt") {
+				_, _ = w.Write([]byte("=== CF7 ===\nStable tag: 5.9\n"))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		for _, slug := range redirected {
+			if strings.Contains(p, slug) {
+				http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	all := append([]string{installed}, redirected...)
+	detected, _ := BruteforcePlugins(BruteforceRequest{
+		Target:  srv.URL,
+		Plugins: all,
+		Threads: 4,
+		HTTP:    wphttp.Config{},
+	})
+
+	if !containsSlug(detected, installed) {
+		t.Errorf("served plugin %q must be detected, got %v", installed, detected)
+	}
+	for _, slug := range redirected {
+		if containsSlug(detected, slug) {
+			t.Errorf("redirected slug %q must not be detected, got %v", slug, detected)
+		}
+	}
+}
+
 // A handful of 403s (at or below the threshold) are plausibly real plugins
 // hardened with their own .htaccess and must still be reported, so the WAF
 // guard does not regress the hardened-plugin detection v0.12 shipped (issue #27).
