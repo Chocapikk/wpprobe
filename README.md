@@ -15,6 +15,7 @@
 [![Kali Linux](https://img.shields.io/badge/Kali%20Linux-included-557C94?logo=kalilinux)](https://pkg.kali.org/pkg/wpprobe)
 [![BlackArch](https://img.shields.io/badge/BlackArch-included-black?logo=archlinux&logoColor=white)](https://blackarch.org/webapp.html)
 [![Exegol](https://img.shields.io/badge/Exegol-included-ED1C24)](https://github.com/ThePorgs/Exegol)
+[![NixOS](https://img.shields.io/badge/NixOS-included-5277C3?logo=nixos&logoColor=white)](https://search.nixos.org/packages?query=wpprobe)
 [![Secator](https://img.shields.io/badge/Secator-supported-4B8BBE)](https://github.com/freelabz/secator)
 
 # WPProbe
