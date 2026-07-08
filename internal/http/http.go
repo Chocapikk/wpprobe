@@ -35,7 +35,7 @@ import (
 	"github.com/corpix/uarand"
 )
 
-var maxResponseSize = 1024 * 1024 // 1MB
+var maxResponseSize = 10 * 1024 * 1024 // 10MB
 
 const defaultMaxRedirects = 10
 
