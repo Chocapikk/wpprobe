@@ -342,6 +342,35 @@ func TestConfig_SharedLimiter(t *testing.T) {
 	}
 }
 
+func TestMaxResponseSize_Is10MB(t *testing.T) {
+	want := 10 * 1024 * 1024
+	if maxResponseSize != want {
+		t.Errorf("maxResponseSize = %d, want %d (10MB)", maxResponseSize, want)
+	}
+}
+
+func TestResponseBetween1MBAnd10MB_Succeeds(t *testing.T) {
+	size := 5 * 1024 * 1024 // 5MB
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data := make([]byte, size)
+		for i := range data {
+			data[i] = 'A'
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(10*time.Second, nil, "", 0, -1)
+	got, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("Get() should succeed for 5MB response, got error: %v", err)
+	}
+	if len(got) != size {
+		t.Errorf("response length = %d, want %d", len(got), size)
+	}
+}
+
 func TestConfig_NoSharedLimiter_CreatesPerClient(t *testing.T) {
 	cfg := Config{
 		RateLimit:    50,
