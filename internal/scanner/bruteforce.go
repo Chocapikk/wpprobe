@@ -77,7 +77,10 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 
 	// Learn what a request for a non-existent plugin file looks like on this
 	// target, so detection works regardless of the web server and its config.
-	calibrator := NewCalibrator(ctx, sharedClient, normalized)
+	calibrator := req.Calibrator
+	if calibrator == nil {
+		calibrator = NewCalibrator(ctx, sharedClient, normalized)
+	}
 
 	bruteCtx := BruteforceContext{
 		ScanContext: ScanContext{
@@ -186,16 +189,20 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 	default:
 	}
 
-	if ctx.Progress != nil {
-		ctx.Progress.SetMessage(fmt.Sprintf("Bruteforcing plugin %-30.30s", plugin))
-	}
-
 	// Phase 1: confirm the plugin is present on disk by probing the files it
 	// ships (issue #27). A response that differs from the calibrated miss
 	// baseline confirms the plugin, even when it is installed but not activated
 	// (which the stealthy scan misses) and regardless of the web server config.
 	found, status := probePluginFiles(ctx, plugin, candidateFiles(plugin, ctx.Fingerprints))
 	if !found {
+		incrementProgress(ctx.Progress)
+		return
+	}
+
+	// A WAF may return 403 for one candidate file and a generated readme for an
+	// absent plugin. Never retain or display the slug when that readme matches
+	// the calibrated deceptive template by at least the configured threshold.
+	if ctx.Calibrator.IsPluginDeceptive(ctx.Ctx, ctx.Client, ctx.Target, plugin) {
 		incrementProgress(ctx.Progress)
 		return
 	}
@@ -275,10 +282,12 @@ func probePluginFiles(ctx BruteforceContext, plugin string, files []string) (boo
 
 func recordPluginFound(plugin, ver string, ctx BruteforceContext) {
 	msg := "Found plugin " + plugin + " version " + ver
-	if ctx.Progress != nil {
-		_, _ = ctx.Progress.Bprintln(logger.FormatSuccess(msg))
-	} else {
-		logger.DefaultLogger.Success(msg)
+	if logger.DefaultLogger.Verbose {
+		if ctx.Progress != nil {
+			_, _ = ctx.Progress.Bprintln(logger.FormatSuccess(msg))
+		} else {
+			logger.DefaultLogger.Success(msg)
+		}
 	}
 
 	ctx.Mu.Lock()

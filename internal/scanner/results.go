@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
@@ -88,12 +89,13 @@ func buildBruteforceResult(detected []string, versions map[string]string) ([]str
 	return detected, result
 }
 
-func calculateRemainingPlugins(stealthyList []string, opts ScanOptions) []string {
+func calculateRemainingPlugins(stealthyList []string, opts ScanOptions, progress Progress) []string {
 	allPlugins, err := LoadPluginsFromFile(opts.PluginList)
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
 		return nil
 	}
+	logLoadedPlugins(progress, len(allPlugins))
 
 	seen := make(map[string]struct{}, len(stealthyList))
 	for _, p := range stealthyList {
@@ -107,6 +109,15 @@ func calculateRemainingPlugins(stealthyList []string, opts ScanOptions) []string
 		}
 	}
 	return remaining
+}
+
+func logLoadedPlugins(progress Progress, pluginCount int) {
+	message := fmt.Sprintf("Loaded %d plugins for brute-force scanning", pluginCount)
+	if logger.DefaultLogger.Verbose && progress != nil {
+		_, _ = progress.Bprintln(logger.FormatInfo(message))
+		return
+	}
+	logger.DefaultLogger.Info(message)
 }
 
 func combineHybridResults(stealthyList []string, stealthyRes PluginDetectionResult, brutefound []string) ([]string, PluginDetectionResult) {
@@ -140,4 +151,3 @@ func handleNoPluginsDetected(ctx ScanSiteContext) {
 
 	writeResults(ctx.Writer, ctx.Target, []file.PluginEntry{})
 }
-

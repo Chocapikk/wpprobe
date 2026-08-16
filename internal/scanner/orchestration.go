@@ -123,6 +123,11 @@ func ScanSite(ctx ScanSiteContext) {
 	default:
 	}
 
+	ctx.Opts.Calibrator = NewScanCalibrator(scanCtx, ctx.Target, ctx.Opts)
+	if ctx.Opts.Calibrator.HasDeceptiveWAF() {
+		DisplayDeceptiveWAFWarning(ctx.Progress)
+	}
+
 	execCtx := ScanExecutionContext{
 		Target:   ctx.Target,
 		Opts:     ctx.Opts,
@@ -131,6 +136,7 @@ func ScanSite(ctx ScanSiteContext) {
 	}
 
 	scanResult := performScan(execCtx, scanMode)
+	scanResult = FilterDeceptiveResults(execCtx, scanResult)
 
 	if len(scanResult.Plugins) == 0 && len(scanResult.Themes) == 0 {
 		handleNoPluginsDetected(ctx)
