@@ -109,7 +109,6 @@ func performBruteforceScan(ctx ScanExecutionContext) ScanDetectionResult {
 	}
 
 	progress := setupBruteforceProgress(ctx.Opts, ctx.Progress, len(plugins))
-	defer finishBruteforceProgress(progress, ctx.Opts)
 
 	bruteReq := BruteforceRequest{
 		Target:   ctx.Target,
@@ -135,8 +134,6 @@ func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 		return bruteResult
 	}
 
-	finishProgressIfNeeded(ctx.Progress)
-
 	remaining := calculateRemainingPlugins(stealthyResult.Plugins, ctx.Opts)
 	if len(remaining) == 0 {
 		return stealthyResult
@@ -155,9 +152,8 @@ func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 
 func performBruteforceOnRemaining(ctx ScanExecutionContext, remaining []string) ([]string, map[string]string) {
 	var bruteBar Progress
-	if ctx.Opts.File == "" && ctx.Opts.NewProgress != nil {
-		bruteBar = ctx.Opts.NewProgress(len(remaining), "Bruteforcing remaining")
-		defer bruteBar.Finish()
+	if ctx.Opts.File == "" {
+		bruteBar = setupBruteforceProgress(ctx.Opts, ctx.Progress, len(remaining))
 	}
 
 	bruteReq := BruteforceRequest{

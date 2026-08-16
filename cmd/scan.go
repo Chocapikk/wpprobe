@@ -89,6 +89,13 @@ var scanCmd = &cobra.Command{
 
 		rateLimit := mustInt(cmd.Flags().GetInt("rate-limit"))
 
+		pluginList := cmd.Flag("plugin-list").Value.String()
+
+		scanMode, err := resolveScanMode(cmd.Flag("mode").Value.String(), pluginList, cmd.Flags().Changed("mode"))
+		if err != nil {
+			return err
+		}
+
 		opts := scanner.ScanOptions{
 			URL:            cmd.Flag("url").Value.String(),
 			File:           cmd.Flag("file").Value.String(),
@@ -97,8 +104,8 @@ var scanCmd = &cobra.Command{
 			Output:         outputFile,
 			OutputFormat:   outputFormat,
 			Verbose:        mustBool(cmd.Flags().GetBool("verbose")),
-			ScanMode:       cmd.Flag("mode").Value.String(),
-			PluginList:     cmd.Flag("plugin-list").Value.String(),
+			ScanMode:       scanMode,
+			PluginList:     pluginList,
 			Headers:        headers,
 			Proxy:          proxyURL,
 			RateLimit:      rateLimit,
@@ -132,6 +139,26 @@ func init() {
 	scanCmd.Flags().String("proxy", "", "HTTP/HTTPS proxy URL (e.g., http://127.0.0.1:8080)")
 	scanCmd.Flags().
 		Int("rate-limit", 50, "Maximum requests per second (0 = unlimited). Default 50 to avoid flooding network.")
+}
+
+func resolveScanMode(mode, pluginList string, modeExplicit bool) (string, error) {
+    if strings.TrimSpace(pluginList) == "" {
+        return mode, nil
+    }
+
+	// If a plugin list is provided without an explicit mode, automatically use
+	// hybrid mode: HTML/REST detection followed by brute-force.
+    if !modeExplicit {
+        return "hybrid", nil
+    }
+
+    // A plugin list cannot be used in stealthy mode.
+    if mode == "stealthy" {
+        return "",
+		fmt.Errorf("--plugin-list/-p requires --mode bruteforce or --mode hybrid")
+    }
+
+    return mode, nil
 }
 
 func mustBool(value bool, err error) bool {
