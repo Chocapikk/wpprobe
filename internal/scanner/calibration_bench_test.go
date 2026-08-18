@@ -37,7 +37,6 @@ func apacheLikeCalibrator() *Calibrator {
 	return &Calibrator{
 		missStatuses:   map[int]struct{}{301: {}},
 		missSigs:       map[responseSig]struct{}{},
-		missStatusOnly: map[int]struct{}{},
 		available:      true,
 	}
 }
@@ -46,7 +45,6 @@ func softNotFoundCalibrator() *Calibrator {
 	c := &Calibrator{
 		missStatuses:   map[int]struct{}{200: {}},
 		missSigs:       map[responseSig]struct{}{},
-		missStatusOnly: map[int]struct{}{},
 		available:      true,
 	}
 	c.missSigs[signature(200, benchBody)] = struct{}{}
