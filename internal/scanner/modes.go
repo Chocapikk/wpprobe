@@ -122,7 +122,7 @@ func performBruteforceScan(ctx ScanExecutionContext) ScanDetectionResult {
 	}
 	detected, versions := BruteforcePlugins(bruteReq)
 
-	detectedList, result := buildBruteforceResult(detected, versions)
+	detectedList, result := buildBruteforceResult(detected)
 	return ScanDetectionResult{Plugins: detectedList, PluginResult: result, Versions: versions}
 }
 

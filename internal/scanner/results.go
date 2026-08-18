@@ -75,7 +75,7 @@ func buildDetectionResult(endpoints []string, endpointsData map[string][]string,
 	return result
 }
 
-func buildBruteforceResult(detected []string, versions map[string]string) ([]string, PluginDetectionResult) {
+func buildBruteforceResult(detected []string) ([]string, PluginDetectionResult) {
 	result := PluginDetectionResult{
 		Plugins:  make(map[string]*PluginData, len(detected)),
 		Detected: detected,
