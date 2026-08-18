@@ -212,3 +212,62 @@ func TestNewCalibratorDeceptiveWAF(t *testing.T) {
 		t.Error("a response matching the deceptive template must be suppressed (miss)")
 	}
 }
+
+// The deceptive-suppression threshold is a heuristic, and its whole safety rests
+// on the margin between "two genuinely different plugin readmes" and "the same
+// deceptive template served for a different slug/version". This test brackets
+// missBodySimilarityThreshold so the margin cannot be silently broken:
+//
+//   - Lowering it (to "catch more") until a real plugin's readme scores above it
+//     would suppress real plugins as deceptive (false negatives). Real, distinct
+//     readmes must stay BELOW the threshold.
+//   - Raising it until a per-request template variant scores below it would let
+//     the deceptive WAF response through (false positives). A near-duplicate
+//     template must stay AT or ABOVE the threshold.
+//
+// Measured values at time of writing: two real readmes ~0.36, real vs deceptive
+// template ~0.42-0.44, near-duplicate template ~0.93.
+func TestDeceptiveSuppressionMargin(t *testing.T) {
+	realA := "=== Contact Form 7 ===\n" +
+		"Contributors: takayukister\n" +
+		"Tags: contact, form, feedback, email, ajax\n" +
+		"Requires at least: 6.0\nTested up to: 6.4\nStable tag: 5.8.4\n" +
+		"License: GPLv2 or later\n== Description ==\n" +
+		"Just another contact form plugin. Simple but flexible. Contact Form 7 " +
+		"can manage multiple contact forms, plus you can customize the form and " +
+		"the mail contents flexibly with simple markup."
+	realB := "=== Yoast SEO ===\n" +
+		"Contributors: yoast, joostdevalk, tacoverdo\n" +
+		"Tags: SEO, XML sitemap, content analysis, readability, schema\n" +
+		"Requires at least: 6.2\nTested up to: 6.4\nStable tag: 21.7\n" +
+		"License: GPLv3\n== Description ==\n" +
+		"Improve your WordPress SEO: write better content and have a fully " +
+		"optimized WordPress site using the Yoast SEO plugin."
+	deceptive := "=== Plugin ===\n" +
+		"Contributors: admin\nTags: wordpress, plugin\n" +
+		"Requires at least: 5.0\nTested up to: 6.4\nStable tag: 1.0.0\n" +
+		"License: GPLv2 or later\n== Description ==\n" +
+		"This plugin is installed and active on this site."
+	// Same template, only the per-request slug/version differs.
+	deceptiveVariant := "=== Plugin ===\n" +
+		"Contributors: admin\nTags: wordpress, plugin\n" +
+		"Requires at least: 5.0\nTested up to: 6.4\nStable tag: 9.9.9\n" +
+		"License: GPLv2 or later\n== Description ==\n" +
+		"This plugin is installed and active on this site."
+
+	// Real plugins must NOT be suppressed: they stay below the threshold.
+	if s := bodySimilarity(realA, realB); s >= missBodySimilarityThreshold {
+		t.Errorf("two genuine readmes scored %.3f >= threshold %.2f: lowering the "+
+			"threshold this far would suppress real plugins", s, missBodySimilarityThreshold)
+	}
+	if s := bodySimilarity(realA, deceptive); s >= missBodySimilarityThreshold {
+		t.Errorf("a real readme vs the deceptive template scored %.3f >= threshold %.2f: "+
+			"real plugins on a deceptive-WAF host would be hidden", s, missBodySimilarityThreshold)
+	}
+
+	// Deceptive template variants MUST be suppressed: they stay at/above threshold.
+	if s := bodySimilarity(deceptive, deceptiveVariant); s < missBodySimilarityThreshold {
+		t.Errorf("a per-request variant of the deceptive template scored %.3f < threshold "+
+			"%.2f: raising the threshold this high would let the fake WAF readme through", s, missBodySimilarityThreshold)
+	}
+}
