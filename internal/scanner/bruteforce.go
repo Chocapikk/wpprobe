@@ -199,13 +199,10 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 		return
 	}
 
-	// A WAF may return 403 for one candidate file and a generated readme for an
-	// absent plugin. Never retain or display the slug when that readme matches
-	// the calibrated deceptive template by at least the configured threshold.
-	if ctx.Calibrator.IsPluginDeceptive(ctx.Ctx, ctx.Client, ctx.Target, plugin) {
-		incrementProgress(ctx.Progress)
-		return
-	}
+	// Deceptive-template suppression (a host serving a generated readme for any
+	// slug) is handled once, post-scan, in FilterDeceptiveResults, which only
+	// re-probes when calibration actually flagged a deceptive WAF. Doing it here
+	// too would re-probe every found plugin on every host, deceptive or not.
 
 	// A bare 403 is ambiguous: a plugin hardened with its own .htaccess and a WAF
 	// forbidding the slug for a plugin that is NOT installed look identical here
