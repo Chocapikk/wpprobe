@@ -40,6 +40,33 @@ func makeVuln(cve, slug, severity, auth string) wordfence.Vulnerability {
 	}
 }
 
+// A filtered search must not reserve room for the entire database. On a 41k
+// entry database that reservation cost 8 MB up front to return a handful of
+// rows.
+func TestFilterByCriteriaDoesNotReserveTheWholeInput(t *testing.T) {
+	vulns := make([]wordfence.Vulnerability, 10000)
+	for index := range vulns {
+		vulns[index] = wordfence.Vulnerability{Slug: "plugin", CVE: "CVE-0000-0000"}
+	}
+	vulns[0].CVE = "CVE-2026-12345"
+
+	matched := search.FilterAll(vulns, "CVE-2026-12345", "", "", "", "")
+	if len(matched) != 1 {
+		t.Fatalf("matched %d entries, want 1", len(matched))
+	}
+	if cap(matched) > len(vulns)/2 {
+		t.Errorf("result reserved capacity %d for %d matches out of %d entries",
+			cap(matched), len(matched), len(vulns))
+	}
+
+	// With no criterion every entry matches, so reserving the full length is
+	// the right call and must be kept.
+	all := search.FilterAll(vulns, "", "", "", "", "")
+	if len(all) != len(vulns) {
+		t.Errorf("unfiltered search returned %d of %d entries", len(all), len(vulns))
+	}
+}
+
 func TestBuildTreeStructure(t *testing.T) {
 	root := tree.Root("root")
 	byPlugin := map[string][]wordfence.Vulnerability{

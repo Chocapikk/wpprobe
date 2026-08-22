@@ -39,6 +39,12 @@ type FilterCriteria struct {
 	Auth     string
 }
 
+// isEmpty reports whether no criterion is set, in which case every entry
+// matches and reserving room for all of them is exactly right.
+func (c FilterCriteria) isEmpty() bool {
+	return c.CVE == "" && c.Plugin == "" && c.Title == "" && c.Severity == "" && c.Auth == ""
+}
+
 // AnyFilterSet checks if any filter in the criteria is set.
 func AnyFilterSet(filters ...string) bool {
 	for _, f := range filters {
@@ -80,8 +86,18 @@ func containsFold(s, substr string) bool {
 	return false
 }
 
+// filterCapacityDivisor sizes the result slice as a fraction of the input.
+// Reserving room for every entry cost 8 MB up front on a 41k-entry database
+// even when the query matched three rows; a search that does match everything
+// simply grows a few times, which is far cheaper than the reservation was.
+const filterCapacityDivisor = 64
+
 func filterByCriteria(vs []wordfence.Vulnerability, criteria FilterCriteria) []wordfence.Vulnerability {
-	out := make([]wordfence.Vulnerability, 0, len(vs))
+	capacity := len(vs)
+	if !criteria.isEmpty() {
+		capacity = len(vs)/filterCapacityDivisor + 1
+	}
+	out := make([]wordfence.Vulnerability, 0, capacity)
 	for _, v := range vs {
 		if criteria.CVE != "" && !containsFold(v.CVE, criteria.CVE) {
 			continue
