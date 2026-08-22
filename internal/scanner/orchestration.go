@@ -123,6 +123,11 @@ func ScanSite(ctx ScanSiteContext) {
 	default:
 	}
 
+	ctx.Opts.Calibrator = NewScanCalibrator(scanCtx, ctx.Target, ctx.Opts)
+	if ctx.Opts.Calibrator.FabricatesContent() {
+		DisplayFabricatedContentWarning(ctx.Progress)
+	}
+
 	execCtx := ScanExecutionContext{
 		Target:   ctx.Target,
 		Opts:     ctx.Opts,

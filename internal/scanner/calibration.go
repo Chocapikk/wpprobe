@@ -21,8 +21,15 @@ package scanner
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/Chocapikk/wpprobe/internal/http"
+	"github.com/Chocapikk/wpprobe/internal/logger"
 )
 
 // probeBodyCap is how many bytes of a response body we fingerprint. The head of
@@ -40,21 +47,21 @@ type responseSig struct {
 	bodyHash uint64
 }
 
-func asciiLower(c byte) byte {
-	if c >= 'A' && c <= 'Z' {
-		return c + 32
+func asciiLower(character byte) byte {
+	if character >= 'A' && character <= 'Z' {
+		return character + 32
 	}
-	return c
+	return character
 }
 
 // matchFold reports whether s, starting at pos, begins with token (token must
 // already be lowercase), comparing ASCII case-insensitively.
-func matchFold(s string, pos int, token string) bool {
-	if pos+len(token) > len(s) {
+func matchFold(input string, position int, token string) bool {
+	if position+len(token) > len(input) {
 		return false
 	}
-	for i := 0; i < len(token); i++ {
-		if asciiLower(s[pos+i]) != token[i] {
+	for tokenIndex := 0; tokenIndex < len(token); tokenIndex++ {
+		if asciiLower(input[position+tokenIndex]) != token[tokenIndex] {
 			return false
 		}
 	}
@@ -63,10 +70,10 @@ func matchFold(s string, pos int, token string) bool {
 
 // indexFold returns the first index >= pos where token (lowercase) occurs in s,
 // case-insensitively, or -1.
-func indexFold(s string, pos int, token string) int {
-	for ; pos+len(token) <= len(s); pos++ {
-		if matchFold(s, pos, token) {
-			return pos
+func indexFold(input string, position int, token string) int {
+	for ; position+len(token) <= len(input); position++ {
+		if matchFold(input, position, token) {
+			return position
 		}
 	}
 	return -1
@@ -94,31 +101,31 @@ const (
 // string is built, the bytes are folded straight into the hash. A
 // strings.Builder + regex version was ~18x slower at 26 allocations; this path
 // runs once per probe on soft-404 hosts.
-func normalizedHash(s string) uint64 {
+func normalizedHash(input string) uint64 {
 	hash := uint64(fnvOffset64)
-	mix := func(c byte) {
-		hash ^= uint64(c)
+	mix := func(character byte) {
+		hash ^= uint64(character)
 		hash *= fnvPrime64
 	}
 
 	emitted, pendingSpace, lastDigit := false, false, false
-	for i, n := 0, len(s); i < n; {
-		c := s[i]
-		if c == '<' {
-			if matchFold(s, i, "<script") {
-				if end := indexFold(s, i+7, "</script>"); end >= 0 {
-					i = end + len("</script>")
+	for position, inputLength := 0, len(input); position < inputLength; {
+		character := input[position]
+		if character == '<' {
+			if matchFold(input, position, "<script") {
+				if end := indexFold(input, position+7, "</script>"); end >= 0 {
+					position = end + len("</script>")
 				} else {
-					i = n
+					position = inputLength
 				}
 				lastDigit = false
 				continue
 			}
-			if matchFold(s, i, "<!--") {
-				if end := indexFold(s, i+4, "-->"); end >= 0 {
-					i = end + len("-->")
+			if matchFold(input, position, "<!--") {
+				if end := indexFold(input, position+4, "-->"); end >= 0 {
+					position = end + len("-->")
 				} else {
-					i = n
+					position = inputLength
 				}
 				lastDigit = false
 				continue
@@ -126,10 +133,10 @@ func normalizedHash(s string) uint64 {
 		}
 
 		switch {
-		case c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v':
+		case character == ' ' || character == '\t' || character == '\n' || character == '\r' || character == '\f' || character == '\v':
 			pendingSpace = emitted // ignore leading whitespace; trailing never flushes
 			lastDigit = false
-		case c >= '0' && c <= '9':
+		case character >= '0' && character <= '9':
 			if pendingSpace {
 				mix(' ')
 				pendingSpace = false
@@ -144,10 +151,10 @@ func normalizedHash(s string) uint64 {
 				mix(' ')
 				pendingSpace = false
 			}
-			mix(c)
+			mix(character)
 			emitted, lastDigit = true, false
 		}
-		i++
+		position++
 	}
 
 	return hash
@@ -179,10 +186,67 @@ type Calibrator struct {
 	// missSigs are exact (status, normalized-bodyHash) shapes seen for absent
 	// paths. Only consulted for ambiguous statuses (see bodyAmbiguous).
 	missSigs map[responseSig]struct{}
-	// missStatusOnly holds statuses whose body varies per request (e.g. a 404
-	// page that echoes the requested path); for those we match on status alone.
-	missStatusOnly map[int]struct{}
-	available      bool
+	// missBodies holds the distinct ambiguous response bodies collected during
+	// calibration. Near-matches are treated as misses, which catches fabricated
+	// readmes whose slug or fake version changes on every request. Bodies are
+	// deduplicated by their normalized signature, so a template that only varies
+	// in its digits contributes a single entry.
+	missBodies map[int][]string
+	// fabricatesContent records that calibration was answered with a plausible
+	// plugin readme (200 + "Stable tag:") for a slug that cannot exist. It is
+	// informational: the suppression itself happens in IsInstalled, which
+	// compares every probe against the calibrated bodies.
+	fabricatesContent bool
+	available         bool
+}
+
+// maxMissBodiesPerStatus caps how many distinct bodies are kept per status.
+// IsInstalled compares every ambiguous probe against each of them, so an
+// unbounded list would make a large brute-force run pay a similarity pass per
+// stored body. Hosts that fabricate content answer with one template, so the
+// deduplicated list is normally one or two entries.
+const maxMissBodiesPerStatus = 5
+
+const missBodySimilarityThreshold = 0.70
+
+// bodySimilarity returns the Sørensen-Dice similarity of two response bodies.
+// Tokens are compared as a multiset so small changes in paths, generated
+// versions, timestamps, or ordering do not prevent a fabricated template from
+// matching its calibration baseline.
+func bodySimilarity(candidateBody, calibrationBody string) float64 {
+	candidateTokens := strings.Fields(strings.ToLower(candidateBody))
+	calibrationTokens := strings.Fields(strings.ToLower(calibrationBody))
+	if len(candidateTokens) == 0 || len(calibrationTokens) == 0 {
+		if len(candidateTokens) == len(calibrationTokens) {
+			return 1
+		}
+		return 0
+	}
+
+	candidateTokenCounts := make(map[string]int, len(candidateTokens))
+	for _, candidateToken := range candidateTokens {
+		candidateTokenCounts[similarityToken(candidateToken)]++
+	}
+
+	commonTokenCount := 0
+	for _, calibrationToken := range calibrationTokens {
+		calibrationToken = similarityToken(calibrationToken)
+		if candidateTokenCounts[calibrationToken] > 0 {
+			commonTokenCount++
+			candidateTokenCounts[calibrationToken]--
+		}
+	}
+
+	return float64(2*commonTokenCount) / float64(len(candidateTokens)+len(calibrationTokens))
+}
+
+func similarityToken(token string) string {
+	// Echoed request paths are the most common source of otherwise identical
+	// soft-404 bodies differing during calibration.
+	if strings.Contains(token, "/") {
+		return "#path"
+	}
+	return token
 }
 
 // bodyAmbiguous reports whether a "not found" status could also be returned by a
@@ -194,66 +258,95 @@ func bodyAmbiguous(status int) bool {
 	return status == 200 || status == 403 || status == 500
 }
 
-// calibrationPaths are random, almost-certainly-absent plugin paths. Two
-// distinct slugs are used so we can tell a stable miss page from one that
-// echoes the requested path. Both file types are covered because a missing
-// .php and a missing static file can behave differently (see nginx above).
-var calibrationPaths = []string{
-	"wpprobe-calib-a9f3e1d7/wpprobe-calib-a9f3e1d7.php",
-	"wpprobe-calib-a9f3e1d7/readme.txt",
-	"wpprobe-calib-7c02bd54/index.php",
-	"wpprobe-calib-7c02bd54/readme.txt",
+const calibrationAttempts = 5
+
+// newCalibrationPaths returns the almost-certainly-absent plugin files used by
+// the brute-force probe. Each path is calibrated independently because a web
+// server or WAF may handle PHP files and readme filename casing differently.
+func newCalibrationPaths() []string {
+	slug := randomCalibrationSlug()
+	return []string{
+		slug + "/readme.txt",
+		slug + "/Readme.txt",
+		slug + "/" + slug + ".php",
+	}
 }
 
-// NewCalibrator probes the target with the known-absent paths and records the
-// resulting response signatures as the miss baseline.
+var calibrationFallbackCounter uint64
+
+func randomCalibrationSlug() string {
+	random := make([]byte, 4)
+	if _, err := rand.Read(random); err != nil {
+		// A collision remains extremely unlikely even when the OS random source
+		// is unavailable; the prefix itself is deliberately non-plugin-like.
+		return fmt.Sprintf(
+			"no-existing-plugin-%x-%x",
+			normalizedHash(err.Error()),
+			atomic.AddUint64(&calibrationFallbackCounter, 1),
+		)
+	}
+	return "no-existing-plugin-" + hex.EncodeToString(random)
+}
+
+// NewCalibrator probes each known-absent candidate several times because a host
+// may answer inconsistently: BitFire, for instance, fabricates a plausible
+// readme for roughly four requests out of five and 404s the rest, so a single
+// probe per path can miss the template entirely. Every attempt is recorded, at
+// calibrationAttempts * len(newCalibrationPaths()) requests per target, so the
+// baseline covers each response the host alternates between.
 func NewCalibrator(ctx context.Context, client *http.HTTPClientManager, target string) *Calibrator {
-	c := &Calibrator{
-		missStatuses:   make(map[int]struct{}),
-		missSigs:       make(map[responseSig]struct{}, len(calibrationPaths)),
-		missStatusOnly: make(map[int]struct{}),
+	calibrator := &Calibrator{
+		missStatuses: make(map[int]struct{}),
+		missSigs:     make(map[responseSig]struct{}, len(newCalibrationPaths())),
+		missBodies:   make(map[int][]string),
 	}
 	base := target + "/wp-content/plugins/"
-	bodiesByStatus := make(map[int]map[uint64]struct{})
 
-	for _, p := range calibrationPaths {
-		select {
-		case <-ctx.Done():
-			return c
-		default:
-		}
-		status, body, err := client.ProbeNoRedirect(ctx, base+p, probeBodyCap)
-		if err != nil {
-			continue
-		}
-		c.available = true
-		c.missStatuses[status] = struct{}{}
-		// Only ambiguous statuses ever need the body hash; skip the work otherwise.
-		if !bodyAmbiguous(status) {
-			continue
-		}
-		sig := signature(status, body)
-		c.missSigs[sig] = struct{}{}
-		if bodiesByStatus[status] == nil {
-			bodiesByStatus[status] = make(map[uint64]struct{})
-		}
-		bodiesByStatus[status][sig.bodyHash] = struct{}{}
-	}
-
-	// If a status produced more than one distinct body across the two slugs, its
-	// body is path-dependent (it echoes the request), so the exact hash is
-	// useless: match that status on the status code alone.
-	for status, hashes := range bodiesByStatus {
-		if len(hashes) > 1 {
-			c.missStatusOnly[status] = struct{}{}
+	for _, calibrationPath := range newCalibrationPaths() {
+		for attempt := 0; attempt < calibrationAttempts; attempt++ {
+			select {
+			case <-ctx.Done():
+				return calibrator
+			default:
+			}
+			status, body, err := client.ProbeNoRedirect(ctx, base+calibrationPath, probeBodyCap)
+			if err != nil {
+				continue
+			}
+			calibrator.available = true
+			calibrator.missStatuses[status] = struct{}{}
+			// Only ambiguous statuses ever need the body hash; skip the work otherwise.
+			if !bodyAmbiguous(status) {
+				continue
+			}
+			if status == 200 && strings.Contains(strings.ToLower(body), "stable tag:") {
+				calibrator.fabricatesContent = true
+			}
+			calibrator.recordMissBody(status, body)
 		}
 	}
-	return c
+	return calibrator
+}
+
+// recordMissBody stores body as a miss baseline for status, skipping bodies
+// whose normalized signature was already seen. A fabricated readme that only
+// changes its version between requests normalizes to one signature, so the
+// repeated calibration attempts cost nothing in stored state.
+func (calibrator *Calibrator) recordMissBody(status int, body string) {
+	sig := signature(status, body)
+	if _, seen := calibrator.missSigs[sig]; seen {
+		return
+	}
+	calibrator.missSigs[sig] = struct{}{}
+	if len(calibrator.missBodies[status]) >= maxMissBodiesPerStatus {
+		return
+	}
+	calibrator.missBodies[status] = append(calibrator.missBodies[status], body)
 }
 
 // IsInstalled reports whether a probe response indicates the file exists on
 // disk, i.e. its signature does not match any calibrated miss.
-func (c *Calibrator) IsInstalled(status int, body string) bool {
+func (calibrator *Calibrator) IsInstalled(status int, body string) bool {
 	// A redirect is never a served file: the web server is rerouting the
 	// request, not serving content from the plugin directory. This catches
 	// hosts where calibration returns 404 but a WAF or reverse proxy returns
@@ -261,7 +354,7 @@ func (c *Calibrator) IsInstalled(status int, body string) bool {
 	if status >= 300 && status < 400 {
 		return false
 	}
-	if !c.available {
+	if !calibrator.available {
 		// Calibration failed (e.g. target unreachable during calibration): fall
 		// back to "served or hardened" - a file that is served (200) or exists
 		// but is access-denied (403).
@@ -269,7 +362,7 @@ func (c *Calibrator) IsInstalled(status int, body string) bool {
 	}
 	// Fast path: a status the server never used for "not found" means the file
 	// was served or executed. No body work for the common 200/403 hit.
-	if _, isMiss := c.missStatuses[status]; !isMiss {
+	if _, isMiss := calibrator.missStatuses[status]; !isMiss {
 		return true
 	}
 	// The status is a "not found" status. If a served file could not have
@@ -277,9 +370,48 @@ func (c *Calibrator) IsInstalled(status int, body string) bool {
 	if !bodyAmbiguous(status) {
 		return false
 	}
-	if _, ok := c.missStatusOnly[status]; ok {
+	if _, isMiss := calibrator.missSigs[signature(status, body)]; isMiss {
 		return false
 	}
-	_, isMiss := c.missSigs[signature(status, body)]
-	return !isMiss
+	for _, missBody := range calibrator.missBodies[status] {
+		if bodySimilarity(body, missBody) >= missBodySimilarityThreshold {
+			return false
+		}
+	}
+	return true
+}
+
+// FabricatesContent reports whether calibration was answered with a plausible
+// plugin readme for a slug that cannot exist. Nothing keys off this beyond the
+// user-facing warning: suppressing such a response is IsInstalled's job, which
+// compares against the calibrated bodies with the response already in hand.
+//
+// Re-probing a detected plugin to confirm it is fabricated cannot work on these
+// hosts. Any path the confirmation picks is either the real file (which does not
+// match the template) or an absent one such as Readme.txt, which the host
+// fabricates for exactly the same reason it fabricated during calibration - so
+// the check reports every real plugin as fake.
+func (calibrator *Calibrator) FabricatesContent() bool {
+	return calibrator.fabricatesContent
+}
+
+func NewScanCalibrator(ctx context.Context, target string, opts ScanOptions) *Calibrator {
+	if opts.Calibrator != nil {
+		return opts.Calibrator
+	}
+	normalizedTarget := http.NormalizeURL(target)
+	client := HTTPConfigFromOpts(opts).NewClient(10 * time.Second)
+	return NewCalibrator(ctx, client, normalizedTarget)
+}
+
+// DisplayFabricatedContentWarning tells the user the target answers for slugs
+// that cannot exist, so brute-force results on this host rest entirely on the
+// calibrated baseline rather than on "the file was served".
+func DisplayFabricatedContentWarning(progress Progress) {
+	message := "The target serves plausible plugin content for slugs that do not exist; results matching the calibrated template are rejected."
+	if progress != nil {
+		_, _ = progress.Bprintln(logger.FormatWarning(message))
+		return
+	}
+	logger.DefaultLogger.Logger.Println(logger.FormatWarning(message))
 }

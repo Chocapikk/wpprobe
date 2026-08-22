@@ -42,8 +42,7 @@ func TestCalibratorIsInstalled(t *testing.T) {
 			signature(404, "nginx not found"): {},
 			signature(301, ""):                {},
 		},
-		missStatusOnly: map[int]struct{}{},
-		available:      true,
+		available: true,
 	}
 	tests := []struct {
 		name   string
@@ -124,9 +123,9 @@ func TestNewCalibratorDynamicNotFound(t *testing.T) {
 	client := wphttp.NewHTTPClient(5*time.Second, nil, "", 0, 0)
 	c := NewCalibrator(context.Background(), client, srv.URL)
 
-	if _, ok := c.missStatusOnly[http.StatusOK]; ok {
-		t.Fatal("normalized dynamic page should be stable, not status-only")
-	}
+	// The per-request digits collapse under normalizedHash, so every dynamic
+	// miss shares one calibrated (200, hash) signature: a differently-numbered
+	// miss is caught by the exact missSigs check without a body-similarity pass.
 	missWithOtherToken := "<!DOCTYPE html><html><head><title>Page not found</title></head><body>error ref 9999 at 17000099999</body></html>"
 	if c.IsInstalled(http.StatusOK, missWithOtherToken) {
 		t.Error("a dynamic soft-404 page must be a miss, not a false positive")
@@ -142,10 +141,9 @@ func TestNewCalibratorDynamicNotFound(t *testing.T) {
 // saw only 404 (issue #27, corvuspay false positive).
 func TestCalibratorRedirectNeverInstalled(t *testing.T) {
 	c := &Calibrator{
-		missStatuses:   map[int]struct{}{404: {}},
-		missSigs:       map[responseSig]struct{}{signature(404, "not found"): {}},
-		missStatusOnly: map[int]struct{}{},
-		available:      true,
+		missStatuses: map[int]struct{}{404: {}},
+		missSigs:     map[responseSig]struct{}{signature(404, "not found"): {}},
+		available:    true,
 	}
 	for _, status := range []int{301, 302, 303, 307, 308} {
 		if c.IsInstalled(status, "") {
@@ -172,9 +170,11 @@ func TestCalibratorRedirectFallback(t *testing.T) {
 }
 
 // A soft-404 host (200 for everything) that echoes the requested path makes
-// every probe body different, even after normalization. The ambiguous 200
-// status must be downgraded to status-only so detection stays conservative (a
-// miss) instead of flagging every probe as a hit.
+// every probe body differ even after normalization. The echoed path is the only
+// varying token, so body-similarity collapses it (similarityToken -> "#path")
+// and a differently-pathed miss still matches the calibrated template above the
+// threshold, keeping detection conservative (a miss) instead of flagging every
+// probe as a hit.
 func TestNewCalibratorEchoingNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("<html><body>Nothing here at " + r.URL.Path + "</body></html>"))
@@ -184,9 +184,6 @@ func TestNewCalibratorEchoingNotFound(t *testing.T) {
 	client := wphttp.NewHTTPClient(5*time.Second, nil, "", 0, 0)
 	c := NewCalibrator(context.Background(), client, srv.URL)
 
-	if _, ok := c.missStatusOnly[http.StatusOK]; !ok {
-		t.Fatal("an echoing soft-404 (200) should be tracked as a status-only miss")
-	}
 	if c.IsInstalled(http.StatusOK, "<html><body>Nothing here at /whatever</body></html>") {
 		t.Error("an echoing soft-404 200 must be treated as a miss")
 	}

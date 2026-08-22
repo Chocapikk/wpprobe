@@ -77,7 +77,10 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 
 	// Learn what a request for a non-existent plugin file looks like on this
 	// target, so detection works regardless of the web server and its config.
-	calibrator := NewCalibrator(ctx, sharedClient, normalized)
+	calibrator := req.Calibrator
+	if calibrator == nil {
+		calibrator = NewCalibrator(ctx, sharedClient, normalized)
+	}
 
 	bruteCtx := BruteforceContext{
 		ScanContext: ScanContext{
@@ -186,10 +189,6 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 	default:
 	}
 
-	if ctx.Progress != nil {
-		ctx.Progress.SetMessage(fmt.Sprintf("Bruteforcing plugin %-30.30s", plugin))
-	}
-
 	// Phase 1: confirm the plugin is present on disk by probing the files it
 	// ships (issue #27). A response that differs from the calibrated miss
 	// baseline confirms the plugin, even when it is installed but not activated
@@ -199,6 +198,10 @@ func scanPlugin(plugin string, ctx BruteforceContext) {
 		incrementProgress(ctx.Progress)
 		return
 	}
+
+	// A host that fabricates a readme for any slug is handled by probePluginFiles
+	// above: the calibrated template is matched against the response already in
+	// hand, so no plugin needs a confirmation probe here.
 
 	// A bare 403 is ambiguous: a plugin hardened with its own .htaccess and a WAF
 	// forbidding the slug for a plugin that is NOT installed look identical here
@@ -275,10 +278,12 @@ func probePluginFiles(ctx BruteforceContext, plugin string, files []string) (boo
 
 func recordPluginFound(plugin, ver string, ctx BruteforceContext) {
 	msg := "Found plugin " + plugin + " version " + ver
-	if ctx.Progress != nil {
-		_, _ = ctx.Progress.Bprintln(logger.FormatSuccess(msg))
-	} else {
-		logger.DefaultLogger.Success(msg)
+	if logger.DefaultLogger.Verbose {
+		if ctx.Progress != nil {
+			_, _ = ctx.Progress.Bprintln(logger.FormatSuccess(msg))
+		} else {
+			logger.DefaultLogger.Success(msg)
+		}
 	}
 
 	ctx.Mu.Lock()

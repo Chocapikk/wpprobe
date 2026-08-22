@@ -107,25 +107,32 @@ func performBruteforceScan(ctx ScanExecutionContext) ScanDetectionResult {
 		logger.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
 		return ScanDetectionResult{}
 	}
+	logLoadedPlugins(ctx.Progress, len(plugins))
 
 	progress := setupBruteforceProgress(ctx.Opts, ctx.Progress, len(plugins))
 	defer finishBruteforceProgress(progress, ctx.Opts)
 
 	bruteReq := BruteforceRequest{
-		Target:   ctx.Target,
-		Plugins:  plugins,
-		Threads:  ctx.Opts.Threads,
-		Progress: progress,
-		HTTP:     HTTPConfigFromOpts(ctx.Opts),
+		Target:     ctx.Target,
+		Plugins:    plugins,
+		Threads:    ctx.Opts.Threads,
+		Progress:   progress,
+		HTTP:       HTTPConfigFromOpts(ctx.Opts),
+		Calibrator: ctx.Opts.Calibrator,
 	}
 	detected, versions := BruteforcePlugins(bruteReq)
 
-	detectedList, result := buildBruteforceResult(detected, versions)
+	detectedList, result := buildBruteforceResult(detected)
 	return ScanDetectionResult{Plugins: detectedList, PluginResult: result, Versions: versions}
 }
 
 func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
-	logger.DefaultLogger.Info("Starting hybrid scan: first stealthy, then brute-force...")
+	message := "Starting hybrid scan: first stealthy, then brute-force..."
+	if logger.DefaultLogger.Verbose && ctx.Progress != nil {
+		_, _ = ctx.Progress.Bprintln(logger.FormatInfo(message))
+	} else {
+		logger.DefaultLogger.Info(message)
+	}
 
 	stealthyResult := performStealthyScan(ctx)
 
@@ -137,7 +144,7 @@ func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 
 	finishProgressIfNeeded(ctx.Progress)
 
-	remaining := calculateRemainingPlugins(stealthyResult.Plugins, ctx.Opts)
+	remaining := calculateRemainingPlugins(stealthyResult.Plugins, ctx.Opts, ctx.Progress)
 	if len(remaining) == 0 {
 		return stealthyResult
 	}
@@ -156,16 +163,17 @@ func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 func performBruteforceOnRemaining(ctx ScanExecutionContext, remaining []string) ([]string, map[string]string) {
 	var bruteBar Progress
 	if ctx.Opts.File == "" && ctx.Opts.NewProgress != nil {
-		bruteBar = ctx.Opts.NewProgress(len(remaining), "Bruteforcing remaining")
+		bruteBar = ctx.Opts.NewProgress(len(remaining), "Bruteforcing plugins")
 		defer bruteBar.Finish()
 	}
 
 	bruteReq := BruteforceRequest{
-		Target:   ctx.Target,
-		Plugins:  remaining,
-		Threads:  ctx.Opts.Threads,
-		Progress: bruteBar,
-		HTTP:     HTTPConfigFromOpts(ctx.Opts),
+		Target:     ctx.Target,
+		Plugins:    remaining,
+		Threads:    ctx.Opts.Threads,
+		Progress:   bruteBar,
+		HTTP:       HTTPConfigFromOpts(ctx.Opts),
+		Calibrator: ctx.Opts.Calibrator,
 	}
 	detected, versions := BruteforcePlugins(bruteReq)
 	return detected, versions

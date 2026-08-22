@@ -98,6 +98,12 @@ func FormatSuccess(msg string) string {
 	return formatTime() + " [" + colorize(ansiSuccess, "SUCCESS") + "] " + msg
 }
 
+// FormatInfo returns a formatted info message without printing it, allowing
+// callers to route the line cleanly above an active progress bar.
+func FormatInfo(msg string) string {
+	return formatTime() + " [" + colorize(ansiInfo, "INFO") + "] " + msg
+}
+
 // FormatWarning returns a formatted warning message string without printing it,
 // so callers can route it through an active progress bar (which otherwise eats a
 // plain logger write) instead of the logger.
