@@ -60,7 +60,7 @@ func TestCSVWriter_WriteResults(t *testing.T) {
 
 	results := []PluginEntry{
 		{
-			Slug:     "test-plugin",
+			Slug:       "test-plugin",
 			Version:    "1.0",
 			Severity:   "High",
 			AuthType:   "Unauth",
@@ -184,7 +184,7 @@ func TestJSONWriter_EmptySeveritiesOmitted(t *testing.T) {
 
 	results := []PluginEntry{
 		{
-			Slug:     "vulnerable-plugin",
+			Slug:       "vulnerable-plugin",
 			Version:    "2.0",
 			Severity:   "high",
 			AuthType:   "Unauth",
@@ -195,14 +195,14 @@ func TestJSONWriter_EmptySeveritiesOmitted(t *testing.T) {
 			CVSSVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
 		},
 		{
-			Slug:   "clean-plugin",
+			Slug:     "clean-plugin",
 			Version:  "3.1.0",
 			Severity: "none",
 			AuthType: "n/a",
 			CVEs:     []string{},
 		},
 		{
-			Slug:   "another-clean-plugin",
+			Slug:     "another-clean-plugin",
 			Version:  "unknown",
 			Severity: "none",
 			AuthType: "n/a",
@@ -266,7 +266,7 @@ func TestCSVWriter_EmptyEntriesPreserved(t *testing.T) {
 
 	results := []PluginEntry{
 		{
-			Slug:   "vulnerable-plugin",
+			Slug:     "vulnerable-plugin",
 			Version:  "2.0",
 			Severity: "high",
 			AuthType: "Unauth",
@@ -274,7 +274,7 @@ func TestCSVWriter_EmptyEntriesPreserved(t *testing.T) {
 			Title:    "SQL Injection",
 		},
 		{
-			Slug:   "clean-plugin",
+			Slug:     "clean-plugin",
 			Version:  "3.1.0",
 			Severity: "none",
 			AuthType: "n/a",

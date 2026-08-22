@@ -83,4 +83,3 @@ func DetectPlugins(
 
 	return detection
 }
-

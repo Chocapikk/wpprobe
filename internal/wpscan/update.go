@@ -293,4 +293,3 @@ func extractCVSS(vulnMap map[string]interface{}) (float64, string) {
 	}
 	return cvssScore, cvssVector
 }
-

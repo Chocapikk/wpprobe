@@ -35,13 +35,13 @@ type PluginEntry struct {
 	Slug         string   `json:"slug"`
 	SoftwareType string   `json:"software_type,omitempty"` // "plugin" or "theme"
 	Version      string   `json:"version"`
-	Severity   string   `json:"severity"`
-	CVEs       []string `json:"cves"`
-	CVELinks   []string `json:"cve_link"`
-	Title      string   `json:"title"`
-	AuthType   string   `json:"auth_type"`
-	CVSSScore  float64  `json:"cvss_score"`
-	CVSSVector string   `json:"cvss_vector"`
+	Severity     string   `json:"severity"`
+	CVEs         []string `json:"cves"`
+	CVELinks     []string `json:"cve_link"`
+	Title        string   `json:"title"`
+	AuthType     string   `json:"auth_type"`
+	CVSSScore    float64  `json:"cvss_score"`
+	CVSSVector   string   `json:"cvss_vector"`
 }
 
 // Vulnerability represents a vulnerability entry.
@@ -103,4 +103,3 @@ type OutputResults struct {
 	Plugins PluginsCollection `json:"plugins"`
 	Themes  PluginsCollection `json:"themes,omitempty"`
 }
-

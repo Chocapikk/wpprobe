@@ -33,7 +33,7 @@ func BenchmarkDetectPlugins_Small(b *testing.B) {
 	}
 	pluginEndpoints := map[string][]string{
 		"woocommerce": {"/woocommerce/v1/products", "/woocommerce/v1/orders"},
-		"elementor":  {"/elementor/v1/templates", "/elementor/v1/pages"},
+		"elementor":   {"/elementor/v1/templates", "/elementor/v1/pages"},
 		"jetpack":     {"/jetpack/v4/site"},
 	}
 
@@ -83,4 +83,3 @@ func BenchmarkDetectPlugins_Large(b *testing.B) {
 		_ = DetectPlugins(detectedEndpoints, pluginEndpoints)
 	}
 }
-

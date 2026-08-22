@@ -167,4 +167,3 @@ func compareDetections(got, want compareValue) bool {
 	}
 	return true
 }
-

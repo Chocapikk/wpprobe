@@ -92,4 +92,3 @@ func BenchmarkReadLines_Large(b *testing.B) {
 		_, _ = ReadLines(tmpfile.Name())
 	}
 }
-

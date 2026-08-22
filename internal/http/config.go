@@ -9,10 +9,10 @@ import (
 type Config struct {
 	Headers        []string
 	Proxy          string
-	RateLimit      int              // Requests per second (0 = unlimited)
-	MaxRedirects   int              // Maximum redirects to follow (0 = disable, -1 = default: 10)
-	ExternalClient *stdhttp.Client  // External HTTP client (optional, for connection pooling)
-	SharedLimiter  *RateLimiter     // Shared rate limiter across all clients (set once, reused)
+	RateLimit      int             // Requests per second (0 = unlimited)
+	MaxRedirects   int             // Maximum redirects to follow (0 = disable, -1 = default: 10)
+	ExternalClient *stdhttp.Client // External HTTP client (optional, for connection pooling)
+	SharedLimiter  *RateLimiter    // Shared rate limiter across all clients (set once, reused)
 }
 
 // NewClient creates an HTTPClientManager from this config.

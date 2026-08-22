@@ -78,4 +78,3 @@ func BenchmarkLoadPluginEndpointsFromData_Large(b *testing.B) {
 		_, _ = LoadPluginEndpointsFromData(data)
 	}
 }
-

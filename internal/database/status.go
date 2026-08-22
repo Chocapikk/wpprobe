@@ -31,7 +31,6 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/file"
 )
 
-
 const releaseURL = "https://github.com/Chocapikk/wpprobe/releases/download/db/wordfence_vulnerabilities.json"
 
 func CheckDatabaseStatus() (exists bool, outdated bool) {

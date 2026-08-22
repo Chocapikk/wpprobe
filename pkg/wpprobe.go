@@ -218,9 +218,9 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		PluginList:     cfg.PluginList,
 		NoCheckVersion: cfg.NoCheckVersion,
 		MaxRedirects:   maxRedirects,
-		File:           "api",        // Set File to disable progress bar display
-		Verbose:        cfg.Verbose,  // Use Verbose from config (default: false)
-		Context:        cfg.Context,  // Propagate context for cancellation
+		File:           "api",          // Set File to disable progress bar display
+		Verbose:        cfg.Verbose,    // Use Verbose from config (default: false)
+		Context:        cfg.Context,    // Propagate context for cancellation
 		HTTPClient:     cfg.HTTPClient, // Use external HTTP client if provided
 	}
 
@@ -391,7 +391,6 @@ func (s *Scanner) Reload() error {
 
 	return nil
 }
-
 
 // DatabaseExists checks if the Wordfence vulnerability database file exists.
 func DatabaseExists() bool {

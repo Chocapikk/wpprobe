@@ -142,23 +142,23 @@ func init() {
 }
 
 func resolveScanMode(mode, pluginList string, modeExplicit bool) (string, error) {
-    if strings.TrimSpace(pluginList) == "" {
-        return mode, nil
-    }
+	if strings.TrimSpace(pluginList) == "" {
+		return mode, nil
+	}
 
 	// If a plugin list is provided without an explicit mode, automatically use
 	// hybrid mode: HTML/REST detection followed by brute-force.
-    if !modeExplicit {
-        return "hybrid", nil
-    }
+	if !modeExplicit {
+		return "hybrid", nil
+	}
 
-    // A plugin list cannot be used in stealthy mode.
-    if mode == "stealthy" {
-        return "",
-		fmt.Errorf("--plugin-list/-p requires --mode bruteforce or --mode hybrid")
-    }
+	// A plugin list cannot be used in stealthy mode.
+	if mode == "stealthy" {
+		return "",
+			fmt.Errorf("--plugin-list/-p requires --mode bruteforce or --mode hybrid")
+	}
 
-    return mode, nil
+	return mode, nil
 }
 
 func mustBool(value bool, err error) bool {

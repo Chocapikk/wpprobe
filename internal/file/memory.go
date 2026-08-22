@@ -58,4 +58,3 @@ func (m *MemoryWriter) Close() {
 	defer m.mu.Unlock()
 	m.results = nil
 }
-

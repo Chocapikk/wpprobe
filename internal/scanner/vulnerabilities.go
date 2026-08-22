@@ -246,7 +246,7 @@ func buildSoftwareEntries(
 func createSoftwareEntry(slug, softwareType, version string, vuln *wordfence.Vulnerability) file.PluginEntry {
 	if vuln == nil {
 		return file.PluginEntry{
-			Slug:       slug,
+			Slug:         slug,
 			SoftwareType: softwareType,
 			Version:      version,
 			CVEs:         []string{},
@@ -255,7 +255,7 @@ func createSoftwareEntry(slug, softwareType, version string, vuln *wordfence.Vul
 		}
 	}
 	return file.PluginEntry{
-		Slug:       slug,
+		Slug:         slug,
 		SoftwareType: softwareType,
 		Version:      version,
 		CVEs:         []string{vuln.CVE},

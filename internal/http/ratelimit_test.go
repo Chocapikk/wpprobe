@@ -237,4 +237,3 @@ func TestRateLimiter_Wait_Refill(t *testing.T) {
 		t.Errorf("Wait() after refill took %v, should be immediate", elapsed)
 	}
 }
-

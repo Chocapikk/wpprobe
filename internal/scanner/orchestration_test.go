@@ -163,7 +163,7 @@ func ScanSiteWithMocks(
 		for _, vuln := range vulns {
 			writer.WriteResults(plugin, []file.PluginEntry{
 				{
-					Slug:   plugin,
+					Slug:     plugin,
 					Version:  version,
 					Severity: vuln.Severity,
 					CVEs:     []string{vuln.CVE},
@@ -172,4 +172,3 @@ func ScanSiteWithMocks(
 		}
 	}
 }
-

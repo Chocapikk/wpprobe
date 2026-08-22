@@ -35,17 +35,17 @@ var benchBody = "<!DOCTYPE html><html lang=\"en-US\"><head><meta charset=\"UTF-8
 
 func apacheLikeCalibrator() *Calibrator {
 	return &Calibrator{
-		missStatuses:   map[int]struct{}{301: {}},
-		missSigs:       map[responseSig]struct{}{},
-		available:      true,
+		missStatuses: map[int]struct{}{301: {}},
+		missSigs:     map[responseSig]struct{}{},
+		available:    true,
 	}
 }
 
 func softNotFoundCalibrator() *Calibrator {
 	c := &Calibrator{
-		missStatuses:   map[int]struct{}{200: {}},
-		missSigs:       map[responseSig]struct{}{},
-		available:      true,
+		missStatuses: map[int]struct{}{200: {}},
+		missSigs:     map[responseSig]struct{}{},
+		available:    true,
 	}
 	c.missSigs[signature(200, benchBody)] = struct{}{}
 	return c
