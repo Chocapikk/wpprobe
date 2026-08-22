@@ -192,7 +192,7 @@ type VulnerabilityCheckContext struct {
 	EntriesMap          *map[string]string
 	EntriesList         *[]file.PluginEntry
 	Vulnerabilities     []wordfence.Vulnerability
-	VulnIndex           map[string][]*wordfence.Vulnerability // Indexed by plugin slug for fast lookup
+	VulnIndex           map[vulnIndexKeyType][]*wordfence.Vulnerability // Indexed by type and slug for fast lookup
 	PreDetectedVersions map[string]string
 	Ctx                 context.Context // Context for cancellation
 	// Client is shared by every version lookup in the run. Building one per

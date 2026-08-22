@@ -132,13 +132,13 @@ func TestBuildVulnerabilityIndex(t *testing.T) {
 
 	index := buildVulnerabilityIndex(vulns)
 
-	if len(index["plugin:plugin-a"]) != 2 {
-		t.Errorf("plugin-a entries = %d, want 2", len(index["plugin:plugin-a"]))
+	if len(index[vulnIndexKey("plugin", "plugin-a")]) != 2 {
+		t.Errorf("plugin-a entries = %d, want 2", len(index[vulnIndexKey("plugin", "plugin-a")]))
 	}
-	if len(index["plugin:plugin-b"]) != 1 {
-		t.Errorf("plugin-b entries = %d, want 1", len(index["plugin:plugin-b"]))
+	if len(index[vulnIndexKey("plugin", "plugin-b")]) != 1 {
+		t.Errorf("plugin-b entries = %d, want 1", len(index[vulnIndexKey("plugin", "plugin-b")]))
 	}
-	if _, ok := index["plugin:"]; ok {
+	if _, ok := index[vulnIndexKey("plugin", "")]; ok {
 		t.Error("Empty slug should not be in index")
 	}
 }

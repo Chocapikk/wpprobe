@@ -110,14 +110,16 @@ done:
 }
 
 var (
-	cachedVulnIndex map[string][]*wordfence.Vulnerability
+	cachedVulnIndex map[vulnIndexKeyType][]*wordfence.Vulnerability
 	cachedVulnSlice []wordfence.Vulnerability
 	cachedVulnMu    sync.Mutex
 )
 
 // getOrBuildVulnerabilityIndex returns a cached index if the vulns slice hasn't changed,
 // otherwise builds a new one. Since vulns come from a global cache, the pointer check works.
-func getOrBuildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]*wordfence.Vulnerability {
+func getOrBuildVulnerabilityIndex(
+	vulns []wordfence.Vulnerability,
+) map[vulnIndexKeyType][]*wordfence.Vulnerability {
 	cachedVulnMu.Lock()
 	defer cachedVulnMu.Unlock()
 
@@ -130,18 +132,30 @@ func getOrBuildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]
 	return cachedVulnIndex
 }
 
-// vulnIndexKey builds a composite key "type:slug" to prevent collisions
-// between plugins and themes that share the same slug.
-func vulnIndexKey(softwareType, slug string) string {
+// vulnIndexKey pairs the software type with the slug, so a plugin and a theme
+// sharing a slug do not collide. It is a struct rather than a "type:slug"
+// string because building that string allocated once per entry, which on a 41k
+// entry database was 41k allocations spent only to be hashed.
+type vulnIndexKeyType struct {
+	softwareType string
+	slug         string
+}
+
+func vulnIndexKey(softwareType, slug string) vulnIndexKeyType {
 	if softwareType == "" {
 		softwareType = "plugin"
 	}
-	return softwareType + ":" + slug
+	return vulnIndexKeyType{softwareType: softwareType, slug: slug}
 }
 
-// buildVulnerabilityIndex creates a map indexed by "type:slug" for fast lookup.
-func buildVulnerabilityIndex(vulns []wordfence.Vulnerability) map[string][]*wordfence.Vulnerability {
-	index := make(map[string][]*wordfence.Vulnerability)
+// buildVulnerabilityIndex creates a map indexed by type and slug for fast lookup.
+func buildVulnerabilityIndex(
+	vulns []wordfence.Vulnerability,
+) map[vulnIndexKeyType][]*wordfence.Vulnerability {
+	// Most entries share a slug with a few others, so the distinct key count
+	// lands well below the entry count; a quarter is a closer starting point
+	// than the zero value and avoids most of the rehashing.
+	index := make(map[vulnIndexKeyType][]*wordfence.Vulnerability, len(vulns)/4)
 	for i := range vulns {
 		if vulns[i].Slug != "" {
 			key := vulnIndexKey(vulns[i].SoftwareType, vulns[i].Slug)
@@ -210,7 +224,7 @@ func findMatchingVulnerabilities(
 	softwareType string,
 	slug string,
 	version string,
-	vulnIndex map[string][]*wordfence.Vulnerability,
+	vulnIndex map[vulnIndexKeyType][]*wordfence.Vulnerability,
 ) []*wordfence.Vulnerability {
 	key := vulnIndexKey(softwareType, slug)
 	vulns, exists := vulnIndex[key]
