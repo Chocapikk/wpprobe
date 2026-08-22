@@ -186,19 +186,32 @@ type Calibrator struct {
 	// missSigs are exact (status, normalized-bodyHash) shapes seen for absent
 	// paths. Only consulted for ambiguous statuses (see bodyAmbiguous).
 	missSigs map[responseSig]struct{}
-	// missBodies holds the ambiguous response bodies collected during
-	// calibration. Near-matches are treated as misses, which catches deceptive
-	// readmes whose slug or fake version changes on every request.
-	missBodies   map[int][]string
-	deceptiveWAF bool
-	available    bool
+	// missBodies holds the distinct ambiguous response bodies collected during
+	// calibration. Near-matches are treated as misses, which catches fabricated
+	// readmes whose slug or fake version changes on every request. Bodies are
+	// deduplicated by their normalized signature, so a template that only varies
+	// in its digits contributes a single entry.
+	missBodies map[int][]string
+	// fabricatesContent records that calibration was answered with a plausible
+	// plugin readme (200 + "Stable tag:") for a slug that cannot exist. It is
+	// informational: the suppression itself happens in IsInstalled, which
+	// compares every probe against the calibrated bodies.
+	fabricatesContent bool
+	available         bool
 }
+
+// maxMissBodiesPerStatus caps how many distinct bodies are kept per status.
+// IsInstalled compares every ambiguous probe against each of them, so an
+// unbounded list would make a large brute-force run pay a similarity pass per
+// stored body. Hosts that fabricate content answer with one template, so the
+// deduplicated list is normally one or two entries.
+const maxMissBodiesPerStatus = 5
 
 const missBodySimilarityThreshold = 0.70
 
 // bodySimilarity returns the Sørensen-Dice similarity of two response bodies.
 // Tokens are compared as a multiset so small changes in paths, generated
-// versions, timestamps, or ordering do not prevent a deceptive template from
+// versions, timestamps, or ordering do not prevent a fabricated template from
 // matching its calibration baseline.
 func bodySimilarity(candidateBody, calibrationBody string) float64 {
 	candidateTokens := strings.Fields(strings.ToLower(candidateBody))
@@ -275,10 +288,12 @@ func randomCalibrationSlug() string {
 	return "no-existing-plugin-" + hex.EncodeToString(random)
 }
 
-// NewCalibrator probes each known-absent candidate several times because a WAF
-// may alternate between 404, 403, and a deceptive 200 response. Calibration
-// stops as soon as a 200 response containing a Stable tag field is found, with
-// calibrationAttempts * len(newCalibrationPaths()) as the maximum request count.
+// NewCalibrator probes each known-absent candidate several times because a host
+// may answer inconsistently: BitFire, for instance, fabricates a plausible
+// readme for roughly four requests out of five and 404s the rest, so a single
+// probe per path can miss the template entirely. Every attempt is recorded, at
+// calibrationAttempts * len(newCalibrationPaths()) requests per target, so the
+// baseline covers each response the host alternates between.
 func NewCalibrator(ctx context.Context, client *http.HTTPClientManager, target string) *Calibrator {
 	calibrator := &Calibrator{
 		missStatuses: make(map[int]struct{}),
@@ -286,10 +301,8 @@ func NewCalibrator(ctx context.Context, client *http.HTTPClientManager, target s
 		missBodies:   make(map[int][]string),
 	}
 	base := target + "/wp-content/plugins/"
-	calibrationPaths := newCalibrationPaths()
-	fallbackOKBodies := make([]string, 0, calibrationAttempts*len(calibrationPaths))
 
-	for _, calibrationPath := range calibrationPaths {
+	for _, calibrationPath := range newCalibrationPaths() {
 		for attempt := 0; attempt < calibrationAttempts; attempt++ {
 			select {
 			case <-ctx.Done():
@@ -306,26 +319,29 @@ func NewCalibrator(ctx context.Context, client *http.HTTPClientManager, target s
 			if !bodyAmbiguous(status) {
 				continue
 			}
-			if status == 200 {
-				if !strings.Contains(strings.ToLower(body), "stable tag:") {
-					fallbackOKBodies = append(fallbackOKBodies, body)
-					continue
-				}
-				calibrator.missSigs[signature(200, body)] = struct{}{}
-				calibrator.missBodies[200] = append(calibrator.missBodies[200], body)
-				calibrator.deceptiveWAF = true
-				return calibrator
+			if status == 200 && strings.Contains(strings.ToLower(body), "stable tag:") {
+				calibrator.fabricatesContent = true
 			}
-			sig := signature(status, body)
-			calibrator.missSigs[sig] = struct{}{}
-			calibrator.missBodies[status] = append(calibrator.missBodies[status], body)
+			calibrator.recordMissBody(status, body)
 		}
 	}
-	for _, fallbackOKBody := range fallbackOKBodies {
-		calibrator.missSigs[signature(200, fallbackOKBody)] = struct{}{}
-		calibrator.missBodies[200] = append(calibrator.missBodies[200], fallbackOKBody)
-	}
 	return calibrator
+}
+
+// recordMissBody stores body as a miss baseline for status, skipping bodies
+// whose normalized signature was already seen. A fabricated readme that only
+// changes its version between requests normalizes to one signature, so the
+// repeated calibration attempts cost nothing in stored state.
+func (calibrator *Calibrator) recordMissBody(status int, body string) {
+	sig := signature(status, body)
+	if _, seen := calibrator.missSigs[sig]; seen {
+		return
+	}
+	calibrator.missSigs[sig] = struct{}{}
+	if len(calibrator.missBodies[status]) >= maxMissBodiesPerStatus {
+		return
+	}
+	calibrator.missBodies[status] = append(calibrator.missBodies[status], body)
 }
 
 // IsInstalled reports whether a probe response indicates the file exists on
@@ -365,44 +381,18 @@ func (calibrator *Calibrator) IsInstalled(status int, body string) bool {
 	return true
 }
 
-// IsDeceptiveBody reports whether a response body matches any calibrated miss
-// template, regardless of the HTTP status that originally returned it. This is
-// used as a final guard when a WAF confirms one candidate file with 403 but
-// serves a deceptive readme with 200 for the same nonexistent plugin.
-func (calibrator *Calibrator) IsDeceptiveBody(body string) bool {
-	for _, missBodies := range calibrator.missBodies {
-		for _, missBody := range missBodies {
-			if bodySimilarity(body, missBody) >= missBodySimilarityThreshold {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (calibrator *Calibrator) HasDeceptiveWAF() bool {
-	return calibrator.deceptiveWAF
-}
-
-func (calibrator *Calibrator) IsPluginDeceptive(
-	ctx context.Context,
-	client *http.HTTPClientManager,
-	target string,
-	plugin string,
-) bool {
-	base := target + "/wp-content/plugins/" + plugin + "/"
-	for _, readmeName := range []string{"readme.txt", "Readme.txt"} {
-		for attempt := 0; attempt < calibrationAttempts; attempt++ {
-			status, body, err := client.ProbeNoRedirect(ctx, base+readmeName, probeBodyCap)
-			if err != nil || status != 200 {
-				continue
-			}
-			if calibrator.IsDeceptiveBody(body) {
-				return true
-			}
-		}
-	}
-	return false
+// FabricatesContent reports whether calibration was answered with a plausible
+// plugin readme for a slug that cannot exist. Nothing keys off this beyond the
+// user-facing warning: suppressing such a response is IsInstalled's job, which
+// compares against the calibrated bodies with the response already in hand.
+//
+// Re-probing a detected plugin to confirm it is fabricated cannot work on these
+// hosts. Any path the confirmation picks is either the real file (which does not
+// match the template) or an absent one such as Readme.txt, which the host
+// fabricates for exactly the same reason it fabricated during calibration - so
+// the check reports every real plugin as fake.
+func (calibrator *Calibrator) FabricatesContent() bool {
+	return calibrator.fabricatesContent
 }
 
 func NewScanCalibrator(ctx context.Context, target string, opts ScanOptions) *Calibrator {
@@ -414,37 +404,14 @@ func NewScanCalibrator(ctx context.Context, target string, opts ScanOptions) *Ca
 	return NewCalibrator(ctx, client, normalizedTarget)
 }
 
-func DisplayDeceptiveWAFWarning(progress Progress) {
-	message := "A deceptive WAF response was detected during calibration; plugin results matching the fake readme template are suppressed."
+// DisplayFabricatedContentWarning tells the user the target answers for slugs
+// that cannot exist, so brute-force results on this host rest entirely on the
+// calibrated baseline rather than on "the file was served".
+func DisplayFabricatedContentWarning(progress Progress) {
+	message := "The target serves plausible plugin content for slugs that do not exist; results matching the calibrated template are rejected."
 	if progress != nil {
 		_, _ = progress.Bprintln(logger.FormatWarning(message))
 		return
 	}
 	logger.DefaultLogger.Logger.Println(logger.FormatWarning(message))
-}
-
-func FilterDeceptiveResults(ctx ScanExecutionContext, result ScanDetectionResult) ScanDetectionResult {
-	if len(result.Plugins) == 0 {
-		return result
-	}
-
-	target := http.NormalizeURL(ctx.Target)
-	client := HTTPConfigFromOpts(ctx.Opts).NewClient(10 * time.Second)
-	calibrator := NewScanCalibrator(ctx.Ctx, target, ctx.Opts)
-	if !calibrator.HasDeceptiveWAF() {
-		return result
-	}
-
-	filteredPlugins := make([]string, 0, len(result.Plugins))
-	for _, plugin := range result.Plugins {
-		if calibrator.IsPluginDeceptive(ctx.Ctx, client, target, plugin) {
-			delete(result.PluginResult.Plugins, plugin)
-			delete(result.Versions, plugin)
-			continue
-		}
-		filteredPlugins = append(filteredPlugins, plugin)
-	}
-	result.Plugins = filteredPlugins
-	result.PluginResult.Detected = filteredPlugins
-	return result
 }

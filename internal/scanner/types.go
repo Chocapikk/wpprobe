@@ -47,7 +47,7 @@ type ScanOptions struct {
 	Context        context.Context                          // Context for cancellation
 	HTTPClient     *http.Client                             // External HTTP client (optional, for connection pooling)
 	SharedLimiter  *wphttp.RateLimiter                      // Global rate limiter shared across all targets
-	Calibrator     *Calibrator                              // Per-target deceptive response baseline
+	Calibrator     *Calibrator                              // Per-target miss-response baseline
 	NewProgress    func(total int, message string) Progress // Factory for creating progress bars (CLI only)
 	DisplayFunc    func(DisplayResultsContext)              // Callback for displaying results (CLI only)
 }

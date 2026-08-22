@@ -21,6 +21,7 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,8 +31,8 @@ import (
 	wphttp "github.com/Chocapikk/wpprobe/internal/http"
 )
 
-// bodySimilarity is the Sørensen-Dice coefficient used to recognise deceptive
-// WAF templates whose paths / generated versions vary per request.
+// bodySimilarity is the Sørensen-Dice coefficient used to recognise fabricated
+// readme templates whose paths / generated versions vary per request.
 func TestBodySimilarity(t *testing.T) {
 	tests := []struct {
 		name string
@@ -146,7 +147,7 @@ func TestNewCalibrationPaths(t *testing.T) {
 }
 
 // A constructed calibrator must treat a body that is similar enough to a
-// calibrated miss template as a miss (deceptive readme whose version/path
+// calibrated miss template as a miss (fabricated readme whose version/path
 // changes per request), while a clearly different served body stays a hit.
 func TestCalibratorSimilarityMiss(t *testing.T) {
 	template := "=== Fake Plugin === stable tag: 1.0.0 contributors waf served for any slug"
@@ -157,9 +158,9 @@ func TestCalibratorSimilarityMiss(t *testing.T) {
 		available:    true,
 	}
 
-	deceptiveVariant := "=== Fake Plugin === stable tag: 9.9.9 contributors waf served for any slug"
-	if c.IsInstalled(200, deceptiveVariant) {
-		t.Error("a per-request variant of the deceptive template must be a miss")
+	fabricatedVariant := "=== Fake Plugin === stable tag: 9.9.9 contributors waf served for any slug"
+	if c.IsInstalled(200, fabricatedVariant) {
+		t.Error("a per-request variant of the fabricated template must be a miss")
 	}
 	realPlugin := "wordpress plugin bootstrap file totally unrelated content here"
 	if !c.IsInstalled(200, realPlugin) {
@@ -167,32 +168,14 @@ func TestCalibratorSimilarityMiss(t *testing.T) {
 	}
 }
 
-// IsDeceptiveBody matches a body against every calibrated miss template
-// regardless of the status that produced it.
-func TestIsDeceptiveBody(t *testing.T) {
-	template := "=== Fake Plugin === stable tag: 1.0.0 contributors waf served for any slug"
-	c := &Calibrator{
-		missStatuses: map[int]struct{}{},
-		missSigs:     map[responseSig]struct{}{},
-		missBodies:   map[int][]string{403: {template}},
-		available:    true,
-	}
-	if !c.IsDeceptiveBody("=== Fake Plugin === stable tag: 7.7.7 contributors waf served for any slug") {
-		t.Error("a variant of the deceptive template must be reported as deceptive")
-	}
-	if c.IsDeceptiveBody("completely unrelated lorem ipsum dolor sit amet") {
-		t.Error("an unrelated body must not be reported as deceptive")
-	}
-}
-
-// End-to-end deceptive-WAF calibration: a host that answers 200 with a readme
-// carrying "Stable tag:" for the random, certainly-absent slug is flagged as a
-// deceptive WAF, and responses matching that template are suppressed.
-func TestNewCalibratorDeceptiveWAF(t *testing.T) {
-	deceptive := "=== Fake Plugin ===\nStable tag: 9.9.9\nContributors: waf\n" +
-		"This deceptive readme is served for any plugin slug by the firewall.\n"
+// End-to-end calibration against a host that fabricates plugin content: a 200
+// carrying "Stable tag:" for the random, certainly-absent slug flags the host,
+// and responses matching that template are treated as misses.
+func TestNewCalibratorFabricatedContent(t *testing.T) {
+	fabricated := "=== Fake Plugin ===\nStable tag: 9.9.9\nContributors: waf\n" +
+		"This fabricated readme is served for any plugin slug by the firewall.\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(deceptive))
+		_, _ = w.Write([]byte(fabricated))
 	}))
 	defer srv.Close()
 
@@ -202,32 +185,87 @@ func TestNewCalibratorDeceptiveWAF(t *testing.T) {
 	if !c.available {
 		t.Fatal("calibration should be available")
 	}
-	if !c.HasDeceptiveWAF() {
-		t.Fatal("a 200 + \"Stable tag:\" response for an absent slug must flag a deceptive WAF")
+	if !c.FabricatesContent() {
+		t.Fatal("a 200 + \"Stable tag:\" response for an absent slug must flag the host")
 	}
-	if !c.IsDeceptiveBody(deceptive) {
-		t.Error("the exact deceptive template must be reported as deceptive")
-	}
-	if c.IsInstalled(http.StatusOK, deceptive) {
-		t.Error("a response matching the deceptive template must be suppressed (miss)")
+	if c.IsInstalled(http.StatusOK, fabricated) {
+		t.Error("a response matching the fabricated template must be a miss")
 	}
 }
 
-// The deceptive-suppression threshold is a heuristic, and its whole safety rests
+// Regression for the BitFire case (PR #31): the host fabricates a readme for
+// ANY path that does not exist, including <real-plugin>/Readme.txt, and varies
+// the version on every request. Calibration must still leave real plugins,
+// whose readme.txt is genuinely served, detected. An earlier revision confirmed
+// each detected plugin by re-probing Readme.txt, which the host fabricates for
+// exactly the same reason it fabricated during calibration, so every real
+// plugin was discarded.
+func TestCalibratorKeepsRealPluginsOnFabricatingHost(t *testing.T) {
+	realReadme := "=== Contact Form 7 ===\n" +
+		"Contributors: takayukister\nTags: contact, form, feedback, email, ajax\n" +
+		"Requires at least: 6.0\nTested up to: 6.4\nStable tag: 5.8.4\n" +
+		"License: GPLv2 or later\n== Description ==\n" +
+		"Just another contact form plugin. Simple but flexible."
+
+	// Only this exact path exists; every other path gets the template, with a
+	// version that changes per request, as BitFire does.
+	const existing = "/wp-content/plugins/contact-form-7/readme.txt"
+	var requests int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == existing {
+			_, _ = w.Write([]byte(realReadme))
+			return
+		}
+		requests++
+		_, _ = fmt.Fprintf(w, "=== Plugin Name ===\n"+
+			"Tags: security, performance, caching, headers, monitoring\n"+
+			"Requires at least: 5.2\nTested up to: 7.0\nStable tag: %d.%d.%d\n"+
+			"Requires PHP: 7.4\nLicense: GPLv2 or later\n"+
+			"Lightweight site hardening and performance tweaks.\n",
+			requests%9+1, requests%7+1, requests%5+1)
+	}))
+	defer srv.Close()
+
+	client := wphttp.NewHTTPClient(5*time.Second, nil, "", 0, 0)
+	c := NewCalibrator(context.Background(), client, srv.URL)
+
+	if !c.FabricatesContent() {
+		t.Fatal("the fabricating host must be flagged during calibration")
+	}
+	// The per-request version must not defeat the baseline: distinct versions
+	// normalize to one signature, so a single body is stored.
+	if got := len(c.missBodies[200]); got != 1 {
+		t.Errorf("expected the varying template to collapse to 1 stored body, got %d", got)
+	}
+	if !c.IsInstalled(http.StatusOK, realReadme) {
+		t.Error("a real plugin readme must stay detected on a fabricating host")
+	}
+	if c.IsInstalled(http.StatusOK, "=== Plugin Name ===\n"+
+		"Tags: security, performance, caching, headers, monitoring\n"+
+		"Requires at least: 5.2\nTested up to: 7.0\nStable tag: 4.2.1\n"+
+		"Requires PHP: 7.4\nLicense: GPLv2 or later\n"+
+		"Lightweight site hardening and performance tweaks.\n") {
+		t.Error("a fresh variant of the fabricated template must be a miss")
+	}
+}
+
+// The fabricated-content suppression threshold is a heuristic, and its whole safety rests
 // on the margin between "two genuinely different plugin readmes" and "the same
-// deceptive template served for a different slug/version". This test brackets
+// fabricated template served for a different slug/version". This test brackets
 // missBodySimilarityThreshold so the margin cannot be silently broken:
 //
 //   - Lowering it (to "catch more") until a real plugin's readme scores above it
-//     would suppress real plugins as deceptive (false negatives). Real, distinct
+//     would suppress real plugins as fabricated (false negatives). Real, distinct
 //     readmes must stay BELOW the threshold.
 //   - Raising it until a per-request template variant scores below it would let
-//     the deceptive WAF response through (false positives). A near-duplicate
+//     the fabricated response through (false positives). A near-duplicate
 //     template must stay AT or ABOVE the threshold.
 //
-// Measured values at time of writing: two real readmes ~0.36, real vs deceptive
-// template ~0.42-0.44, near-duplicate template ~0.93.
-func TestDeceptiveSuppressionMargin(t *testing.T) {
+// Measured values at time of writing: two real readmes ~0.36, real vs fabricated
+// template ~0.42-0.44, near-duplicate template ~0.93. Against a live BitFire
+// host the margin is wider still: real readmes score 0.19-0.26 against the
+// served template, while two of its per-request variants score 0.996.
+func TestFabricatedSuppressionMargin(t *testing.T) {
 	realA := "=== Contact Form 7 ===\n" +
 		"Contributors: takayukister\n" +
 		"Tags: contact, form, feedback, email, ajax\n" +
@@ -243,13 +281,13 @@ func TestDeceptiveSuppressionMargin(t *testing.T) {
 		"License: GPLv3\n== Description ==\n" +
 		"Improve your WordPress SEO: write better content and have a fully " +
 		"optimized WordPress site using the Yoast SEO plugin."
-	deceptive := "=== Plugin ===\n" +
+	fabricated := "=== Plugin ===\n" +
 		"Contributors: admin\nTags: wordpress, plugin\n" +
 		"Requires at least: 5.0\nTested up to: 6.4\nStable tag: 1.0.0\n" +
 		"License: GPLv2 or later\n== Description ==\n" +
 		"This plugin is installed and active on this site."
 	// Same template, only the per-request slug/version differs.
-	deceptiveVariant := "=== Plugin ===\n" +
+	fabricatedVariant := "=== Plugin ===\n" +
 		"Contributors: admin\nTags: wordpress, plugin\n" +
 		"Requires at least: 5.0\nTested up to: 6.4\nStable tag: 9.9.9\n" +
 		"License: GPLv2 or later\n== Description ==\n" +
@@ -260,14 +298,14 @@ func TestDeceptiveSuppressionMargin(t *testing.T) {
 		t.Errorf("two genuine readmes scored %.3f >= threshold %.2f: lowering the "+
 			"threshold this far would suppress real plugins", s, missBodySimilarityThreshold)
 	}
-	if s := bodySimilarity(realA, deceptive); s >= missBodySimilarityThreshold {
-		t.Errorf("a real readme vs the deceptive template scored %.3f >= threshold %.2f: "+
-			"real plugins on a deceptive-WAF host would be hidden", s, missBodySimilarityThreshold)
+	if s := bodySimilarity(realA, fabricated); s >= missBodySimilarityThreshold {
+		t.Errorf("a real readme vs the fabricated template scored %.3f >= threshold %.2f: "+
+			"real plugins on a fabricating host would be hidden", s, missBodySimilarityThreshold)
 	}
 
-	// Deceptive template variants MUST be suppressed: they stay at/above threshold.
-	if s := bodySimilarity(deceptive, deceptiveVariant); s < missBodySimilarityThreshold {
-		t.Errorf("a per-request variant of the deceptive template scored %.3f < threshold "+
-			"%.2f: raising the threshold this high would let the fake WAF readme through", s, missBodySimilarityThreshold)
+	// Fabricated template variants MUST be suppressed: they stay at/above threshold.
+	if s := bodySimilarity(fabricated, fabricatedVariant); s < missBodySimilarityThreshold {
+		t.Errorf("a per-request variant of the fabricated template scored %.3f < threshold "+
+			"%.2f: raising the threshold this high would let the fabricated readme through", s, missBodySimilarityThreshold)
 	}
 }
