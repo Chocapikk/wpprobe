@@ -86,12 +86,20 @@ func performStealthyScan(ctx ScanExecutionContext) ScanDetectionResult {
 
 	setProgressMessage(ctx.Progress, isFileScan(ctx.Opts), "Scanning REST API endpoints...")
 
-	endpointsData, err := loadEndpointsData()
-	if err != nil {
-		return ScanDetectionResult{Themes: htmlResult.Themes}
+	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, httpCfg)
+
+	// Parsing the endpoint database costs about 35 ms and 8 MB, and it is only
+	// consulted to match discovered routes. A target that exposes none - a
+	// hardened site, a REST route index behind a WAF, a host that is not
+	// WordPress at all - has nothing to match, so it should not pay for it.
+	var endpointsData map[string][]string
+	if len(endpoints) > 0 {
+		var err error
+		if endpointsData, err = loadEndpointsData(); err != nil {
+			return ScanDetectionResult{Themes: htmlResult.Themes}
+		}
 	}
 
-	endpoints := FetchEndpoints(ctx.Ctx, ctx.Target, httpCfg)
 	pluginResult := buildDetectionResult(endpoints, endpointsData, htmlResult.Plugins)
 
 	return ScanDetectionResult{
