@@ -181,3 +181,66 @@ func TestCheckLatestVersionOptOut(t *testing.T) {
 		t.Errorf("CheckLatestVersion() = %+v, want Known false when the check is disabled", got)
 	}
 }
+
+// The banner and `wpprobe update` must not disagree inside one run, so the
+// refresh path ignores the memo even while it is still fresh.
+func TestRefreshLatestVersionIgnoresTheCache(t *testing.T) {
+	path := useTempCache(t)
+	var requests atomic.Int64
+	useTagServer(t, tagServer(t, &requests, "v1.2.0"))
+
+	fresh, err := json.Marshal(releaseCheckCache{Latest: "1.0.0", CheckedAt: time.Now()})
+	if err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if err := os.WriteFile(path, fresh, 0o644); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+
+	cached := CheckLatestVersion("v1.1.0")
+	if !cached.Current {
+		t.Fatalf("precondition: the stale memo should make v1.1.0 look current, got %+v", cached)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("the cached path made %d requests", requests.Load())
+	}
+
+	refreshed := RefreshLatestVersion("v1.1.0")
+	if requests.Load() != 1 {
+		t.Errorf("refresh made %d requests, want 1", requests.Load())
+	}
+	if refreshed.Version != "1.2.0" || refreshed.Current {
+		t.Errorf("RefreshLatestVersion() = %+v, want the freshly fetched 1.2.0 and Current false", refreshed)
+	}
+
+	// And the refreshed answer replaces the memo, so the next run agrees.
+	if again := CheckLatestVersion("v1.1.0"); again.Version != "1.2.0" || again.Current {
+		t.Errorf("cached answer after refresh = %+v, want the refreshed 1.2.0", again)
+	}
+}
+
+// A tag learned by the update command corrects the memo the banner reads.
+func TestRememberLatestRelease(t *testing.T) {
+	useTempCache(t)
+	var requests atomic.Int64
+	useTagServer(t, tagServer(t, &requests, "v1.0.0"))
+
+	RememberLatestRelease("v1.2.0")
+
+	got := CheckLatestVersion("v1.1.0")
+	if requests.Load() != 0 {
+		t.Errorf("the remembered tag should have been reused, %d requests went out", requests.Load())
+	}
+	if got.Version != "1.2.0" || got.Current {
+		t.Errorf("CheckLatestVersion() = %+v, want the remembered 1.2.0 and Current false", got)
+	}
+}
+
+// A tag that is not a version must not poison the memo.
+func TestRememberLatestReleaseIgnoresGarbage(t *testing.T) {
+	path := useTempCache(t)
+	RememberLatestRelease("not-a-version")
+	if _, err := os.Stat(path); err == nil {
+		t.Error("an unparseable tag was written to the cache")
+	}
+}

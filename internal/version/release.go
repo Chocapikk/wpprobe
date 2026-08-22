@@ -36,10 +36,12 @@ var tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
 // hold the whole run up: the check is a courtesy, not a prerequisite.
 const releaseCheckTimeout = 4 * time.Second
 
-// releaseCheckTTL is how long a lookup is reused. The banner check fires on
-// every invocation, including `wpprobe --help`, and releases are published far
-// more rarely than the tool is run.
-const releaseCheckTTL = 24 * time.Hour
+// releaseCheckTTL is how long a lookup is reused. It trades a request per
+// invocation against how stale the banner can be, and the banner states a fact
+// rather than a hint: an hour keeps the badge defensible while still collapsing
+// a working session's many runs into a single lookup. A day did not - a build
+// published three hours after the last check was still announced as current.
+const releaseCheckTTL = time.Hour
 
 // noCheckEnv disables the lookup entirely for people who would rather their
 // scanner not talk to github.com on startup.
@@ -62,11 +64,26 @@ type Latest struct {
 // reusing a cached answer for releaseCheckTTL so the lookup does not run on
 // every invocation.
 func CheckLatestVersion(currentVersion string) Latest {
+	return checkLatestVersion(currentVersion, false)
+}
+
+// RefreshLatestVersion is CheckLatestVersion without the cached shortcut, for
+// the moments where the answer has to be current rather than recent: `wpprobe
+// update` is about to act on it, and a banner contradicting the command running
+// underneath it is worse than a request.
+func RefreshLatestVersion(currentVersion string) Latest {
+	return checkLatestVersion(currentVersion, true)
+}
+
+func checkLatestVersion(currentVersion string, refresh bool) Latest {
 	if os.Getenv(noCheckEnv) != "" {
 		return Latest{}
 	}
 
-	latestVersion, ok := cachedLatestTag()
+	latestVersion, ok := "", false
+	if !refresh {
+		latestVersion, ok = cachedLatestTag()
+	}
 	if !ok {
 		if latestVersion, ok = fetchLatestTag(); !ok {
 			return Latest{}
@@ -160,6 +177,18 @@ func cachedLatestTag() (string, bool) {
 		return "", false
 	}
 	return cache.Latest, true
+}
+
+// RememberLatestRelease records a release tag learned elsewhere, so a lookup the
+// update command already paid for corrects the banner instead of leaving it to
+// contradict what the user was just told. The tag is normalized to match what
+// fetchLatestTag stores.
+func RememberLatestRelease(tag string) {
+	parsed, err := semver.NewVersion(trimVersionPrefix(tag))
+	if err != nil {
+		return
+	}
+	storeLatestTag(parsed.String())
 }
 
 // storeLatestTag memoizes a successful lookup, best effort.

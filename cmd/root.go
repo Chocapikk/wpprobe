@@ -35,6 +35,16 @@ var rootCmd = &cobra.Command{
 	Version: version.Current().Display,
 }
 
+// wantsFreshReleaseCheck reports whether the command about to run makes a
+// recent answer insufficient. `wpprobe update` acts on the release list, so a
+// banner served from the memo could announce the build as current a moment
+// before the update finds a newer one. Cobra resolves the command itself, so
+// this does not guess at the arguments.
+func wantsFreshReleaseCheck() bool {
+	command, _, err := rootCmd.Find(os.Args[1:])
+	return err == nil && command != nil && command.Name() == updateCmd.Name()
+}
+
 // buildStatus compares the running build with the published releases. A build
 // carrying no comparable version is not checked at all, so it is never told to
 // update to something it cannot be compared against, and no request goes out.
@@ -42,7 +52,11 @@ func buildStatus(build version.Info) logger.BuildStatus {
 	if build.Comparable == "" {
 		return logger.BuildUnreleased
 	}
-	latest := version.CheckLatestVersion(build.Comparable)
+	check := version.CheckLatestVersion
+	if wantsFreshReleaseCheck() {
+		check = version.RefreshLatestVersion
+	}
+	latest := check(build.Comparable)
 	if !latest.Known {
 		return logger.BuildUnknown
 	}

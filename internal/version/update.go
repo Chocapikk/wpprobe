@@ -83,6 +83,9 @@ func getLatestVersion() (string, error) {
 	}
 
 	logger.DefaultLogger.Success("Latest WPProbe version found: " + version)
+	// The banner's check reads the same memo, so hand it what this lookup just
+	// established rather than letting it keep answering from an older one.
+	RememberLatestRelease(version)
 	return version, nil
 }
 
