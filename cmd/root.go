@@ -42,7 +42,11 @@ func buildStatus(build version.Info) logger.BuildStatus {
 	if build.Comparable == "" {
 		return logger.BuildUnreleased
 	}
-	if _, isLatest := version.CheckLatestVersion(build.Comparable); isLatest {
+	latest := version.CheckLatestVersion(build.Comparable)
+	if !latest.Known {
+		return logger.BuildUnknown
+	}
+	if latest.Current {
 		return logger.BuildLatest
 	}
 	return logger.BuildOutdated

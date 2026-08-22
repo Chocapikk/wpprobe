@@ -21,8 +21,6 @@ package version
 
 import (
 	"context"
-	"encoding/json"
-	nethttp "net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -32,49 +30,10 @@ import (
 	"github.com/Masterminds/semver"
 )
 
-var tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
-
 var versionRegex = regexp.MustCompile(`(?:Stable tag|Version):\s*([0-9A-Za-z.\-]+)`)
 var themeVersionRegex = regexp.MustCompile(`(?i)Version:\s*([0-9A-Za-z.\-]+)`)
 
 var readmeNames = []string{"readme.txt", "Readme.txt", "README.txt"}
-
-func CheckLatestVersion(currentVersion string) (string, bool) {
-	resp, err := nethttp.Get(tagsURL)
-	if err != nil {
-		return "unknown", false
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	var tags []struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return "unknown", false
-	}
-	if len(tags) == 0 {
-		return "unknown", false
-	}
-
-	var latest *semver.Version
-	for _, tag := range tags {
-		vstr := strings.TrimPrefix(tag.Name, "v")
-		if v, err := semver.NewVersion(vstr); err == nil {
-			if latest == nil || v.Compare(latest) > 0 {
-				latest = v
-			}
-		}
-	}
-	if latest == nil {
-		return "unknown", false
-	}
-
-	curr, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
-	if err != nil {
-		return latest.String(), false
-	}
-	return latest.String(), curr.Compare(latest) >= 0
-}
 
 func GetPluginVersion(target, plugin string, cfg http.Config) string {
 	return GetPluginVersionWithContext(context.Background(), target, plugin, cfg)

@@ -147,6 +147,18 @@ Set `WORDFENCE_API_KEY` for Wordfence database updates (free). Set `WPSCAN_API_T
 wpprobe update
 ```
 
+Only binaries installed from a release update themselves. A build from source is
+usually ahead of the last release, so replacing it would be a downgrade: rebuild
+it from the repository instead, or pass `--force` to install the release binary
+anyway.
+
+On startup WPProbe checks the newest published release to label the banner. The
+answer is cached for 24 hours, and the check can be turned off entirely:
+
+```sh
+export WPPROBE_NO_UPDATE_CHECK=1
+```
+
 ## How It Works
 
 **Stealthy mode** queries exposed REST API routes (`?rest_route=/`) and matches discovered endpoints against a precompiled database of known plugin signatures. It also discovers active themes by parsing `wp-content/themes/` references from the page HTML and fetches their version from `style.css`. This generates minimal requests and avoids detection by WAFs.

@@ -122,6 +122,10 @@ const (
 	// BuildUnreleased is a build carrying no version to compare, so claiming it
 	// is either current or outdated would be a guess.
 	BuildUnreleased
+	// BuildUnknown is a build whose version is comparable but whose release
+	// lookup did not produce an answer, typically offline. Reporting it as
+	// outdated would turn a failed check into a false claim.
+	BuildUnknown
 )
 
 func (l *Logger) PrintBanner(version string, buildStatus BuildStatus) {
@@ -131,6 +135,8 @@ func (l *Logger) PrintBanner(version string, buildStatus BuildStatus) {
 		status = colorize(ansiSuccess+ansiBold, "latest")
 	case BuildUnreleased:
 		status = colorize(ansiWarning+ansiBold, "unreleased")
+	case BuildUnknown:
+		status = colorize(ansiGray+ansiBold, "unknown")
 	default:
 		status = colorize(ansiError+ansiBold, "outdated")
 	}

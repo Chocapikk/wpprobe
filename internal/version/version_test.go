@@ -21,7 +21,6 @@ package version
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	nethttp "net/http"
 	"net/http/httptest"
@@ -30,50 +29,6 @@ import (
 
 	"github.com/Chocapikk/wpprobe/internal/http"
 )
-
-func TestCheckLatestVersion(t *testing.T) {
-	mockServer := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		tags := []struct {
-			Name string `json:"name"`
-		}{
-			{Name: "v1.0.0"},
-			{Name: "v1.2.0"},
-			{Name: "v1.1.0"},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(tags); err != nil {
-			t.Errorf("Failed to encode JSON: %v", err)
-		}
-	}))
-	defer mockServer.Close()
-
-	originalTagsURL := tagsURL
-	tagsURL = mockServer.URL
-	defer func() { tagsURL = originalTagsURL }()
-
-	tests := []struct {
-		name           string
-		currentVersion string
-		want           string
-		wantIsLatest   bool
-	}{
-		{"Current is latest", "v1.2.0", "1.2.0", true},
-		{"Current is outdated", "v1.0.0", "1.2.0", false},
-		{"Invalid current version", "invalid", "1.2.0", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, isLatest := CheckLatestVersion(tt.currentVersion)
-			if got != tt.want {
-				t.Errorf("CheckLatestVersion() got = %v, want %v", got, tt.want)
-			}
-			if isLatest != tt.wantIsLatest {
-				t.Errorf("CheckLatestVersion() isLatest = %v, want %v", isLatest, tt.wantIsLatest)
-			}
-		})
-	}
-}
 
 func TestGetPluginVersion(t *testing.T) {
 	mockServer := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
