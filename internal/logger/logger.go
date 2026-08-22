@@ -111,10 +111,28 @@ func FormatWarning(msg string) string {
 	return formatTime() + " [" + colorize(ansiWarning, "WARNING") + "] " + msg
 }
 
-func (l *Logger) PrintBanner(version string, isLatest bool) {
-	status := colorize(ansiError+ansiBold, "outdated")
-	if isLatest {
+// BuildStatus is how a build compares to the published releases.
+type BuildStatus int
+
+const (
+	// BuildLatest is a build at or ahead of the newest published release.
+	BuildLatest BuildStatus = iota
+	// BuildOutdated is a build behind the newest published release.
+	BuildOutdated
+	// BuildUnreleased is a build carrying no version to compare, so claiming it
+	// is either current or outdated would be a guess.
+	BuildUnreleased
+)
+
+func (l *Logger) PrintBanner(version string, buildStatus BuildStatus) {
+	var status string
+	switch buildStatus {
+	case BuildLatest:
 		status = colorize(ansiSuccess+ansiBold, "latest")
+	case BuildUnreleased:
+		status = colorize(ansiWarning+ansiBold, "unreleased")
+	default:
+		status = colorize(ansiError+ansiBold, "outdated")
 	}
 
 	logo := `
@@ -136,9 +154,4 @@ func (l *Logger) PrintBanner(version string, isLatest bool) {
 
 	fmt.Println(logo + "\n" + versionLine + "\n")
 	fmt.Println(colorize(ansiGray+ansiBold, "Stealthy WordPress Plugin Scanner - By @Chocapikk\n"))
-
-	if !isLatest && l.Verbose {
-		l.Warning("Your current WPProbe version is outdated. Latest version available.")
-		l.Info("Update with: wpprobe update")
-	}
 }

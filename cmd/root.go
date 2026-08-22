@@ -32,14 +32,45 @@ var rootCmd = &cobra.Command{
 	Use:     "wpprobe",
 	Short:   "A fast WordPress plugin enumeration tool",
 	Long:    `WPProbe is a high-speed WordPress plugin scanner that detects installed plugins and checks for known vulnerabilities using the Wordfence database.`,
-	Version: version.Version,
+	Version: version.Current().Display,
+}
+
+// buildStatus compares the running build with the published releases. A build
+// carrying no comparable version is not checked at all, so it is never told to
+// update to something it cannot be compared against, and no request goes out.
+func buildStatus(build version.Info) logger.BuildStatus {
+	if build.Comparable == "" {
+		return logger.BuildUnreleased
+	}
+	if _, isLatest := version.CheckLatestVersion(build.Comparable); isLatest {
+		return logger.BuildLatest
+	}
+	return logger.BuildOutdated
+}
+
+// warnIfOutdated points at the remedy that actually applies: a release binary
+// replaces itself, a build from source has to be rebuilt. Telling the second
+// one to run `wpprobe update` would have swapped it for an older release.
+func warnIfOutdated(build version.Info, status logger.BuildStatus) {
+	if status != logger.BuildOutdated {
+		return
+	}
+	if build.Release {
+		logger.DefaultLogger.Warning("Your current WPProbe version is outdated. Latest version available.")
+		logger.DefaultLogger.Info("Update with: wpprobe update")
+		return
+	}
+	logger.DefaultLogger.Warning("This build is behind the latest release (" + build.Display + ").")
+	logger.DefaultLogger.Info("Pull the repository and rebuild to catch up.")
 }
 
 func Execute() {
 	version.CleanupOldBinary()
 
-	_, isLatest := version.CheckLatestVersion(version.Version)
-	logger.DefaultLogger.PrintBanner(version.Version, isLatest)
+	build := version.Current()
+	status := buildStatus(build)
+	logger.DefaultLogger.PrintBanner(build.Display, status)
+	warnIfOutdated(build, status)
 
 	dbExists, dbOutdated := database.CheckDatabaseStatus()
 	if !dbExists {

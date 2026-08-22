@@ -103,8 +103,7 @@ func TestLogger_PrintBanner(t *testing.T) {
 	os.Stdout = w
 
 	version := "v1.0.0"
-	isLatest := true
-	DefaultLogger.PrintBanner(version, isLatest)
+	DefaultLogger.PrintBanner(version, BuildLatest)
 	_ = w.Close()
 
 	var outBuf bytes.Buffer
@@ -119,7 +118,7 @@ func TestLogger_PrintBanner(t *testing.T) {
 	r, w, _ = os.Pipe()
 	os.Stdout = w
 
-	DefaultLogger.PrintBanner(version, false)
+	DefaultLogger.PrintBanner(version, BuildOutdated)
 	_ = w.Close()
 
 	outBuf.Reset()
@@ -129,5 +128,25 @@ func TestLogger_PrintBanner(t *testing.T) {
 	output = outBuf.String()
 	if !strings.Contains(output, "outdated") {
 		t.Errorf("PrintBanner() output = %v, want 'outdated'", output)
+	}
+
+	// A build with no comparable version must be labelled neither current nor
+	// outdated, since both would be a guess.
+	r, w, _ = os.Pipe()
+	os.Stdout = w
+
+	DefaultLogger.PrintBanner("dev", BuildUnreleased)
+	_ = w.Close()
+
+	outBuf.Reset()
+	_, _ = outBuf.ReadFrom(r)
+	os.Stdout = originalStdout
+
+	output = outBuf.String()
+	if !strings.Contains(output, "unreleased") {
+		t.Errorf("PrintBanner() output = %v, want 'unreleased'", output)
+	}
+	if strings.Contains(output, "outdated") {
+		t.Errorf("PrintBanner() output = %v, must not claim an unreleased build is outdated", output)
 	}
 }
