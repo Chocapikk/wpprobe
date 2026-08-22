@@ -20,6 +20,7 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"strings"
@@ -31,7 +32,10 @@ import (
 )
 
 // isValidSlug checks if s matches (?i)[a-z][a-z0-9_-]* without regex overhead.
-func isValidSlug(s string) bool {
+// It takes bytes because the caller reads them straight out of the tokenizer's
+// buffer, where turning a candidate into a string just to reject it would be
+// the bulk of the work.
+func isValidSlug(s []byte) bool {
 	if len(s) == 0 {
 		return false
 	}
@@ -101,29 +105,48 @@ func discoverPluginsFromHTML(ctx context.Context, target string, cfg http.Config
 	return result.Plugins, err
 }
 
+var (
+	wpContentMarker = []byte("wp-content/")
+	pluginsPrefix   = []byte("wp-content/plugins/")
+	uploadsPrefix   = []byte("wp-content/uploads/")
+	themesPrefix    = []byte("wp-content/themes/")
+)
+
 // extractSlugFromPath finds prefix (e.g. "wp-content/plugins/") in val and extracts the slug after it.
-func extractSlugFromPath(val, prefix string, dest map[string]struct{}) {
+// A string is only built for a candidate that passes validation and is being
+// stored, so a page full of unrelated markup allocates nothing here.
+func extractSlugFromPath(val, prefix []byte, dest map[string]struct{}) {
 	search := val
 	for {
-		idx := strings.Index(search, prefix)
+		idx := bytes.Index(search, prefix)
 		if idx < 0 {
 			return
 		}
 		after := search[idx+len(prefix):]
 		// Extract slug up to next "/" or end of string
-		end := strings.IndexByte(after, '/')
-		var slug string
-		if end < 0 {
-			slug = after
-		} else {
+		slug := after
+		if end := bytes.IndexByte(after, '/'); end >= 0 {
 			slug = after[:end]
 		}
 		if isValidSlug(slug) {
-			dest[slug] = struct{}{}
+			dest[string(slug)] = struct{}{}
 		}
 		// Continue searching after this match
 		search = after
 	}
+}
+
+// extractSlugsFrom scans one attribute value or text run for all three
+// locations. The single marker check up front is what makes it cheap: most of a
+// page mentions wp-content nowhere, and rejecting it once beats three separate
+// searches.
+func extractSlugsFrom(val []byte, pluginDest, themeDest map[string]struct{}) {
+	if !bytes.Contains(val, wpContentMarker) {
+		return
+	}
+	extractSlugFromPath(val, pluginsPrefix, pluginDest)
+	extractSlugFromPath(val, uploadsPrefix, pluginDest)
+	extractSlugFromPath(val, themesPrefix, themeDest)
 }
 
 func extractSlugsFromReader(r io.Reader, pluginDest, themeDest map[string]struct{}) error {
@@ -139,20 +162,17 @@ func extractSlugsFromReader(r io.Reader, pluginDest, themeDest map[string]struct
 
 		switch tt {
 		case html.StartTagToken, html.SelfClosingTagToken:
-			tok := z.Token()
-			for _, attr := range tok.Attr {
-				val := attr.Val
-				extractSlugFromPath(val, "wp-content/plugins/", pluginDest)
-				extractSlugFromPath(val, "wp-content/uploads/", pluginDest)
-				extractSlugFromPath(val, "wp-content/themes/", themeDest)
+			// TagAttr walks the attributes in the tokenizer's own buffer.
+			// z.Token() would allocate a Token and copy every name and value on
+			// every tag, whether or not the tag mentions wp-content at all.
+			_, hasAttr := z.TagName()
+			for hasAttr {
+				var val []byte
+				_, val, hasAttr = z.TagAttr()
+				extractSlugsFrom(val, pluginDest, themeDest)
 			}
 		case html.TextToken:
-			text := string(z.Text())
-			if strings.Contains(text, "wp-content/") {
-				extractSlugFromPath(text, "wp-content/plugins/", pluginDest)
-				extractSlugFromPath(text, "wp-content/uploads/", pluginDest)
-				extractSlugFromPath(text, "wp-content/themes/", themeDest)
-			}
+			extractSlugsFrom(z.Text(), pluginDest, themeDest)
 		}
 	}
 }

@@ -40,7 +40,7 @@ func BenchmarkIsValidSlug(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, s := range slugs {
-			_ = isValidSlug(s)
+			_ = isValidSlug([]byte(s))
 		}
 	}
 }
@@ -59,7 +59,7 @@ func BenchmarkExtractSlugFromPath(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		dest := make(map[string]struct{})
 		for _, v := range vals {
-			extractSlugFromPath(v, "wp-content/plugins/", dest)
+			extractSlugFromPath([]byte(v), []byte("wp-content/plugins/"), dest)
 		}
 	}
 }
