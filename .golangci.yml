@@ -1,0 +1,18 @@
+# golangci-lint configuration.
+#
+# Without this file the CI lint step ran on defaults, and in golangci-lint v2
+# formatters are no longer part of the default linter set. Nothing checked
+# formatting, so gofmt drift accumulated across 21 files without ever turning
+# the build red. That is what the formatters block below is here to prevent.
+version: "2"
+
+linters:
+  # The five linters v2 enables by default: errcheck, govet, ineffassign,
+  # staticcheck and unused. Pinned explicitly so a toolchain upgrade cannot
+  # silently change what the build enforces.
+  default: standard
+
+formatters:
+  # goimports is gofmt plus import grouping, and the tree already satisfies it.
+  enable:
+    - goimports
