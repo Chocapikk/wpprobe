@@ -72,7 +72,16 @@ func fetchVersionFromReadme(ctx context.Context, client *http.HTTPClientManager,
 // GetThemeVersionWithContext fetches the theme version from style.css.
 // Only reads the first 8KB since the Version header is at the top of the file.
 func GetThemeVersionWithContext(ctx context.Context, target, theme string, cfg http.Config) string {
-	httpClient := cfg.NewClient(10 * time.Second)
+	return GetThemeVersionWithClient(ctx, cfg.NewClient(10*time.Second), target, theme)
+}
+
+// GetThemeVersionWithClient uses an existing HTTP client instead of creating a
+// new one, so a scan reuses connections across every theme it looks up.
+func GetThemeVersionWithClient(
+	ctx context.Context,
+	httpClient *http.HTTPClientManager,
+	target, theme string,
+) string {
 	select {
 	case <-ctx.Done():
 		return "unknown"

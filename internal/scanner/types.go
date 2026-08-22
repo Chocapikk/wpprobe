@@ -195,6 +195,10 @@ type VulnerabilityCheckContext struct {
 	VulnIndex           map[string][]*wordfence.Vulnerability // Indexed by plugin slug for fast lookup
 	PreDetectedVersions map[string]string
 	Ctx                 context.Context // Context for cancellation
+	// Client is shared by every version lookup in the run. Building one per
+	// plugin gives each its own empty connection pool, so no connection is ever
+	// reused and every plugin pays a fresh TCP (and TLS) handshake.
+	Client *wphttp.HTTPClientManager
 }
 
 // ScanExecutionConfig contains all configuration for executing multiple scans.

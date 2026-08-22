@@ -22,6 +22,7 @@ package scanner
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/Chocapikk/wpprobe/internal/file"
 	versionpkg "github.com/Chocapikk/wpprobe/internal/version"
@@ -45,6 +46,16 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 
 	vulnIndex := getOrBuildVulnerabilityIndex(req.Vulns)
 
+	// One client for the whole run, so version lookups reuse connections
+	// instead of opening one per plugin. Redirects are followed here: a readme
+	// served from a canonical URL is still the plugin's readme.
+	httpConfig := HTTPConfigFromOpts(req.Opts)
+	if httpConfig.MaxRedirects == 0 {
+		httpConfig.MaxRedirects = -1
+	}
+	sharedClient := httpConfig.NewClient(10 * time.Second)
+	sharedClient.EnableKeepAlives(req.Opts.Threads)
+
 	checkCtx := VulnerabilityCheckContext{
 		ScanContext: ScanContext{
 			Target:   req.Target,
@@ -61,6 +72,7 @@ func CheckVulnerabilities(req VulnerabilityCheckRequest) (map[string]string, []f
 		VulnIndex:           vulnIndex,
 		PreDetectedVersions: req.Versions,
 		Ctx:                 req.Ctx,
+		Client:              sharedClient,
 	}
 
 	scanCtx := req.Ctx
@@ -172,18 +184,26 @@ func getSoftwareVersion(slug, softwareType string, opts ScanOptions, ctx Vulnera
 			return version
 		}
 	}
-	cfg := ctx.HTTP
-	if cfg.MaxRedirects == 0 {
-		cfg.MaxRedirects = -1
-	}
 	scanCtx := ctx.Ctx
 	if scanCtx == nil {
 		scanCtx = context.Background()
 	}
-	if softwareType == "theme" {
-		return versionpkg.GetThemeVersionWithContext(scanCtx, ctx.Target, slug, cfg)
+	if ctx.Client == nil {
+		// Callers that build the context themselves (tests, embedders) may not
+		// set a client; fall back rather than panicking, at the old cost.
+		cfg := ctx.HTTP
+		if cfg.MaxRedirects == 0 {
+			cfg.MaxRedirects = -1
+		}
+		if softwareType == "theme" {
+			return versionpkg.GetThemeVersionWithContext(scanCtx, ctx.Target, slug, cfg)
+		}
+		return versionpkg.GetPluginVersionWithContext(scanCtx, ctx.Target, slug, cfg)
 	}
-	return versionpkg.GetPluginVersionWithContext(scanCtx, ctx.Target, slug, cfg)
+	if softwareType == "theme" {
+		return versionpkg.GetThemeVersionWithClient(scanCtx, ctx.Client, ctx.Target, slug)
+	}
+	return versionpkg.GetPluginVersionWithClient(scanCtx, ctx.Client, ctx.Target, slug)
 }
 
 func findMatchingVulnerabilities(
