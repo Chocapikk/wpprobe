@@ -74,6 +74,38 @@ func TestLoadPluginEndpointsFromData(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "JSONL, one record per line",
+			data: []byte("{\"plugin1\": [\"/a\"]}\n{\"plugin2\": [\"/b\"]}\n"),
+			want: map[string][]string{
+				"plugin1": {"/a"},
+				"plugin2": {"/b"},
+			},
+		},
+		{
+			name: "last line without a trailing newline",
+			data: []byte("{\"plugin1\": [\"/a\"]}\n{\"plugin2\": [\"/b\"]}"),
+			want: map[string][]string{
+				"plugin1": {"/a"},
+				"plugin2": {"/b"},
+			},
+		},
+		{
+			name: "blank lines are ignored",
+			data: []byte("\n{\"plugin1\": [\"/a\"]}\n\n\n{\"plugin2\": [\"/b\"]}\n\n"),
+			want: map[string][]string{
+				"plugin1": {"/a"},
+				"plugin2": {"/b"},
+			},
+		},
+		{
+			name: "a malformed line does not cost the rest of the file",
+			data: []byte("{\"plugin1\": [\"/a\"]}\n{ broken\n{\"plugin2\": [\"/b\"]}\n"),
+			want: map[string][]string{
+				"plugin1": {"/a"},
+				"plugin2": {"/b"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -87,6 +119,26 @@ func TestLoadPluginEndpointsFromData(t *testing.T) {
 				t.Errorf("LoadPluginEndpointsFromData() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// Lines are decoded into one map that is reused across the file, so a line that
+// fails halfway must not leak the keys it managed to set into the result, nor
+// into the line after it.
+func TestLoadPluginEndpointsFromDataDiscardsPartialLines(t *testing.T) {
+	// The second line parses "good" before hitting the malformed value.
+	data := []byte("{\"first\": [\"/a\"]}\n{\"good\": [\"/b\"], \"bad\": [oops]}\n{\"last\": [\"/c\"]}\n")
+
+	got, err := LoadPluginEndpointsFromData(data)
+	if err != nil {
+		t.Fatalf("LoadPluginEndpointsFromData() error = %v", err)
+	}
+	if _, leaked := got["good"]; leaked {
+		t.Error("a key from a line that failed to parse leaked into the result")
+	}
+	want := map[string][]string{"first": {"/a"}, "last": {"/c"}}
+	if !mapsEqual(got, want) {
+		t.Errorf("LoadPluginEndpointsFromData() = %v, want %v", got, want)
 	}
 }
 

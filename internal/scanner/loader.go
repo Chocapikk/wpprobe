@@ -120,19 +120,31 @@ func LoadPluginsFromFile(filename string) ([]string, error) {
 }
 
 // LoadPluginEndpointsFromData loads plugin endpoints from JSONL data.
+//
+// Lines are walked in place rather than through bytes.Split, which would
+// materialize a slice header for every line in the file up front, and each line
+// is decoded into one reused map instead of a fresh one, which halves the
+// allocations. A line that does not parse is skipped, as before, so one bad
+// record cannot cost the whole file.
 func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
-	lines := bytes.Split(data, []byte{'\n'})
-	pluginEndpoints := make(map[string][]string, len(lines))
+	pluginEndpoints := make(map[string][]string, bytes.Count(data, []byte{'\n'})+1)
+	lineData := make(map[string][]string, 1)
 
-	for _, line := range lines {
+	for len(data) > 0 {
+		line := data
+		if newline := bytes.IndexByte(data, '\n'); newline >= 0 {
+			line, data = data[:newline], data[newline+1:]
+		} else {
+			data = nil
+		}
 		if len(line) == 0 {
 			continue
 		}
-		var pluginData map[string][]string
-		if err := json.Unmarshal(line, &pluginData); err != nil {
+		clear(lineData)
+		if err := json.Unmarshal(line, &lineData); err != nil {
 			continue
 		}
-		for plugin, endpoints := range pluginData {
+		for plugin, endpoints := range lineData {
 			pluginEndpoints[plugin] = endpoints
 		}
 	}
