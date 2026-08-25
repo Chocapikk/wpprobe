@@ -178,41 +178,45 @@ URL,Plugin,Version,Severity,AuthType,CVEs,CVE Links,CVSS Score,CVSS Vector,Title
 http://example.com,give,2.20.1,critical,Unauth,CVE-2025-22777,https://www.cve.org/CVERecord?id=CVE-2025-22777,9.8,CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H,GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection
 ```
 
+The JSON output is always an array, with one object per scanned target, so a single file remains valid whether you scan one URL or many with `-f`.
+
 **JSON:**
 ```json
-{
-  "url": "http://example.com",
-  "plugins": {
-    "give": [
-      {
-        "version": "2.20.1",
-        "severities": [
-          {
-            "critical": [
-              {
-                "auth_type": "Unauth",
-                "vulnerabilities": [
-                  {
-                    "cve": "CVE-2025-22777",
-                    "cve_link": "https://www.cve.org/CVERecord?id=CVE-2025-22777",
-                    "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection",
-                    "cvss_score": 9.8,
-                    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "wordpress-seo": [
-      {
-        "version": "27.1.1"
-      }
-    ]
+[
+  {
+    "url": "http://example.com",
+    "plugins": {
+      "give": [
+        {
+          "version": "2.20.1",
+          "severities": [
+            {
+              "critical": [
+                {
+                  "auth_type": "Unauth",
+                  "vulnerabilities": [
+                    {
+                      "cve": "CVE-2025-22777",
+                      "cve_link": "https://www.cve.org/CVERecord?id=CVE-2025-22777",
+                      "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection",
+                      "cvss_score": 9.8,
+                      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "wordpress-seo": [
+        {
+          "version": "27.1.1"
+        }
+      ]
+    }
   }
-}
+]
 ```
 
 </details>
