@@ -236,12 +236,16 @@ type JSONWriter struct {
 }
 
 func NewJSONWriter(output string) *JSONWriter {
-	file, err := os.OpenFile(output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(output, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to open JSON file: " + err.Error())
 		os.Exit(1)
 	}
-	return &JSONWriter{file: file}
+	if _, err := file.WriteString("["); err != nil {
+		logger.DefaultLogger.Error("Failed to write JSON file: " + err.Error())
+		os.Exit(1)
+	}
+	return &JSONWriter{file: file, first: true}
 }
 
 func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
@@ -319,11 +323,10 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	_ = encoder.Encode(outputEntry)
 
 	data := buffer.Bytes()
-	if len(data) > 0 {
-		data = data[:len(data)-1]
-	}
+	data = bytes.TrimRight(data, "\n")
+
 	if !j.first {
-		_, _ = j.file.WriteString("\n")
+		_, _ = j.file.WriteString(",")
 	}
 	j.first = false
 	_, _ = j.file.Write(data)
@@ -332,6 +335,7 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 func (j *JSONWriter) Close() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	_, _ = j.file.WriteString("]")
 	_ = j.file.Close()
 }
 

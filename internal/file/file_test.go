@@ -149,11 +149,18 @@ func TestJSONWriter_WriteResults(t *testing.T) {
 
 	t.Logf("JSON file content: %s", string(file))
 
-	var data map[string]interface{}
-	err = json.Unmarshal(file, &data)
-	if err != nil {
-		t.Fatalf("Failed to parse JSON: %v", err)
+	if !json.Valid(file) {
+		t.Fatalf("Output is not valid JSON: %s", string(file))
 	}
+
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(file, &arr); err != nil {
+		t.Fatalf("Failed to parse JSON array: %v", err)
+	}
+	if len(arr) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(arr))
+	}
+	data := arr[0]
 
 	if data["url"] != "http://example.com" {
 		t.Errorf("Expected URL 'http://example.com', got %v", data["url"])
@@ -218,10 +225,18 @@ func TestJSONWriter_EmptySeveritiesOmitted(t *testing.T) {
 		t.Fatalf("Failed to read JSON: %v", err)
 	}
 
-	var data map[string]interface{}
-	if err := json.Unmarshal(raw, &data); err != nil {
-		t.Fatalf("Failed to parse JSON: %v", err)
+	if !json.Valid(raw) {
+		t.Fatalf("Output is not valid JSON: %s", string(raw))
 	}
+
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		t.Fatalf("Failed to parse JSON array: %v", err)
+	}
+	if len(arr) != 1 {
+		t.Fatalf("Expected 1 entry, got %d", len(arr))
+	}
+	data := arr[0]
 
 	plugins := data["plugins"].(map[string]interface{})
 
@@ -249,6 +264,119 @@ func TestJSONWriter_EmptySeveritiesOmitted(t *testing.T) {
 		if _, hasSev := vg["severities"]; hasSev {
 			t.Errorf("Expected no severities key for %s, but it was present", name)
 		}
+	}
+}
+
+// TestJSONWriter_MultipleTargetsValidArray verifies that scanning several
+// targets with -f produces a single valid JSON array, not concatenated
+// objects (JSONL). See: https://github.com/Chocapikk/wpprobe/issues/33
+func TestJSONWriter_MultipleTargetsValidArray(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_multi_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	writer := NewJSONWriter(tmpFile.Name())
+
+	targets := []string{
+		"http://localhost:8082",
+		"http://localhost:8889",
+		"http://localhost:9000",
+	}
+	for _, url := range targets {
+		writer.WriteResults(url, []PluginEntry{
+			{Slug: "p", Version: "1.0", Severity: "High", CVEs: []string{"CVE-1"}},
+		})
+	}
+	writer.Close()
+
+	raw, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read JSON: %v", err)
+	}
+
+	if !json.Valid(raw) {
+		t.Fatalf("Multi-target output is not valid JSON: %s", string(raw))
+	}
+
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		t.Fatalf("Failed to parse JSON array: %v", err)
+	}
+	if len(arr) != len(targets) {
+		t.Fatalf("Expected %d entries, got %d", len(targets), len(arr))
+	}
+	for i, url := range targets {
+		if arr[i]["url"] != url {
+			t.Errorf("Entry %d: expected url %q, got %v", i, url, arr[i]["url"])
+		}
+	}
+}
+
+// TestJSONWriter_NoTargetsEmptyArray verifies that a run that writes no
+// results still produces a valid, parseable empty array.
+func TestJSONWriter_NoTargetsEmptyArray(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_empty_arr_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+
+	writer := NewJSONWriter(tmpFile.Name())
+	writer.Close()
+
+	raw, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read JSON: %v", err)
+	}
+	if !json.Valid(raw) {
+		t.Fatalf("Empty output is not valid JSON: %q", string(raw))
+	}
+
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		t.Fatalf("Failed to parse empty JSON array: %v", err)
+	}
+	if len(arr) != 0 {
+		t.Fatalf("Expected 0 entries, got %d", len(arr))
+	}
+}
+
+// TestJSONWriter_ReopenTruncates verifies that re-running against an existing
+// output file replaces it with a fresh valid array instead of appending a
+// second array to the previous content.
+func TestJSONWriter_ReopenTruncates(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_reopen_*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	name := tmpFile.Name()
+	_ = tmpFile.Close()
+	defer func() { _ = os.Remove(name) }()
+
+	for run := 0; run < 2; run++ {
+		writer := NewJSONWriter(name)
+		writer.WriteResults("http://example.com", []PluginEntry{
+			{Slug: "p", Version: "1.0", Severity: "High", CVEs: []string{"CVE-1"}},
+		})
+		writer.Close()
+	}
+
+	raw, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatalf("Failed to read JSON: %v", err)
+	}
+	if !json.Valid(raw) {
+		t.Fatalf("Reopened output is not valid JSON: %s", string(raw))
+	}
+
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		t.Fatalf("Failed to parse JSON array: %v", err)
+	}
+	if len(arr) != 1 {
+		t.Fatalf("Expected 1 entry after reopen, got %d", len(arr))
 	}
 }
 
