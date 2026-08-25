@@ -240,6 +240,12 @@ Contributions are welcome. Please open an issue or submit a pull request.
 
 MIT License - see LICENSE file for details.
 
+## Third Party Data
+
+Vulnerability data comes from Wordfence Intelligence, provided by Defiant, Inc. Copyright (c) Defiant, Inc. All rights reserved. The pre-built database published in the `db` release of this repository is a processed copy of that data, redistributed under the license granted in the [Wordfence Intelligence Terms and Conditions](https://www.wordfence.com/wordfence-intelligence-terms-and-conditions/). Any copy you make must reproduce Defiant, Inc.'s copyright designation and that license, both of which are in [NOTICE](NOTICE) and are written next to the database on disk when you run `update-db`.
+
+WPProbe is not affiliated with, endorsed by, or sponsored by Defiant, Inc.
+
 ## Credits
 
 Developed by [@Chocapikk](https://github.com/Chocapikk).

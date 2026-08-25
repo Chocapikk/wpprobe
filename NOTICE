@@ -1,0 +1,38 @@
+WPProbe
+Copyright (c) 2025 Valentin Lobstein (Chocapikk) <balgogan@protonmail.com>
+Licensed under the MIT License. See LICENSE.md.
+
+================================================================================
+THIRD PARTY DATA
+================================================================================
+
+Wordfence Intelligence Vulnerability Database
+---------------------------------------------
+
+WPProbe retrieves vulnerability data from the Wordfence Intelligence API and
+redistributes a processed copy of that data as a release asset in this
+repository (tag `db`, file `wordfence_vulnerabilities.json`).
+
+Wordfence Intelligence is provided by Defiant, Inc. ("Company").
+Copyright (c) Defiant, Inc. All rights reserved.
+Wordfence and Wordfence Intelligence are trademarks of Defiant, Inc.
+
+The following license grant is reproduced from the Wordfence Intelligence
+Terms and Conditions (Last Updated: January 26, 2026), section 3.1:
+
+    License Grants. Subject to this Agreement, Company hereby grants you a
+    perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+    license to reproduce, prepare derivative works of, publicly display,
+    publicly perform, sublicense, and distribute the Service. Any copy you make
+    for such purposes is authorized provided that you reproduce Company's
+    copyright designation, this license, and the license of any disclosed
+    Company licensor in any such copy.
+
+The full Wordfence Intelligence Terms and Conditions are available at:
+
+    https://www.wordfence.com/wordfence-intelligence-terms-and-conditions/
+
+No Company licensor is disclosed in those Terms and Conditions, so no
+additional licensor license is reproduced here.
+
+WPProbe is not affiliated with, endorsed by, or sponsored by Defiant, Inc.

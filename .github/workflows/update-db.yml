@@ -26,12 +26,37 @@ jobs:
       - name: Update Wordfence database
         run: ./wpprobe update-db --api-key "${{ secrets.WORDFENCE_API_KEY }}"
 
+      - name: Build release notes
+        run: |
+          {
+            echo "Auto-updated Wordfence vulnerability database."
+            echo
+            echo "This asset is a processed copy of the Wordfence Intelligence vulnerability database."
+            echo
+            echo "Wordfence Intelligence is provided by Defiant, Inc. (\"Company\")."
+            echo "Copyright (c) Defiant, Inc. All rights reserved."
+            echo "Wordfence and Wordfence Intelligence are trademarks of Defiant, Inc."
+            echo
+            echo "The following license grant is reproduced from the Wordfence Intelligence Terms and Conditions (Last Updated: January 26, 2026), section 3.1:"
+            echo
+            echo "> License Grants. Subject to this Agreement, Company hereby grants you a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable license to reproduce, prepare derivative works of, publicly display, publicly perform, sublicense, and distribute the Service. Any copy you make for such purposes is authorized provided that you reproduce Company's copyright designation, this license, and the license of any disclosed Company licensor in any such copy."
+            echo
+            echo "The full Terms and Conditions are available at https://www.wordfence.com/wordfence-intelligence-terms-and-conditions/"
+            echo
+            echo "WPProbe is not affiliated with, endorsed by, or sponsored by Defiant, Inc."
+          } > release-notes.md
+
       - name: Create db release if missing
-        run: gh release create db --prerelease --title "Vulnerability Database" --notes "Auto-updated Wordfence vulnerability database." 2>/dev/null || true
+        run: gh release create db --prerelease --title "Vulnerability Database" --notes-file release-notes.md 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload database to release
-        run: gh release upload db ~/.config/wpprobe/wordfence_vulnerabilities.json --clobber
+      - name: Refresh release notes
+        run: gh release edit db --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload database and notice to release
+        run: gh release upload db ~/.config/wpprobe/wordfence_vulnerabilities.json NOTICE --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -36,7 +36,47 @@ import (
 const (
 	wordfenceAPI = "https://www.wordfence.com/api/intelligence/v3/vulnerabilities/production"
 	githubDBURL  = "https://github.com/Chocapikk/wpprobe/releases/download/db/wordfence_vulnerabilities.json"
+	noticeFile   = "wordfence_vulnerabilities.NOTICE.txt"
 )
+
+// wordfenceNotice is written next to every copy of the Wordfence database, as
+// required by the Wordfence Intelligence Terms and Conditions.
+const wordfenceNotice = `Wordfence Intelligence Vulnerability Database
+
+Wordfence Intelligence is provided by Defiant, Inc. ("Company").
+Copyright (c) Defiant, Inc. All rights reserved.
+Wordfence and Wordfence Intelligence are trademarks of Defiant, Inc.
+
+The following license grant is reproduced from the Wordfence Intelligence
+Terms and Conditions (Last Updated: January 26, 2026), section 3.1:
+
+    License Grants. Subject to this Agreement, Company hereby grants you a
+    perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+    license to reproduce, prepare derivative works of, publicly display,
+    publicly perform, sublicense, and distribute the Service. Any copy you make
+    for such purposes is authorized provided that you reproduce Company's
+    copyright designation, this license, and the license of any disclosed
+    Company licensor in any such copy.
+
+The full Terms and Conditions are available at:
+https://www.wordfence.com/wordfence-intelligence-terms-and-conditions/
+
+WPProbe is not affiliated with, endorsed by, or sponsored by Defiant, Inc.
+`
+
+// writeNotice stores the Wordfence copyright designation and license reference
+// alongside the database file.
+func writeNotice() {
+	path, err := file.GetStoragePath(noticeFile)
+	if err != nil {
+		logger.DefaultLogger.Warning("Could not resolve path for Wordfence notice: " + err.Error())
+		return
+	}
+
+	if err := os.WriteFile(path, []byte(wordfenceNotice), 0o644); err != nil {
+		logger.DefaultLogger.Warning("Could not write Wordfence notice: " + err.Error())
+	}
+}
 
 // Vulnerability is an alias for the common vulnerability type.
 type Vulnerability = vulnerability.Vulnerability
@@ -73,6 +113,8 @@ func updateFromAPI(apiKey string) error {
 		return err
 	}
 
+	writeNotice()
+
 	logger.DefaultLogger.Success("Wordfence data updated successfully!")
 	return nil
 }
@@ -103,6 +145,8 @@ func updateFromGitHub() error {
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		return fmt.Errorf("failed to write database: %w", err)
 	}
+
+	writeNotice()
 
 	logger.DefaultLogger.Success("Wordfence data downloaded from GitHub release.")
 	return nil
