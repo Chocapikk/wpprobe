@@ -28,28 +28,28 @@ import (
 func BenchmarkIsVersionVulnerable_Hit(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = IsVersionVulnerable("1.5.0", "1.0.0", "2.0.0")
+		_ = IsVersionVulnerable("1.5.0", "1.0.0", "2.0.0", true, true)
 	}
 }
 
 func BenchmarkIsVersionVulnerable_Miss(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = IsVersionVulnerable("3.0.0", "1.0.0", "2.0.0")
+		_ = IsVersionVulnerable("3.0.0", "1.0.0", "2.0.0", true, true)
 	}
 }
 
 func BenchmarkIsVersionVulnerable_InvalidVersion(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = IsVersionVulnerable("not-a-version", "1.0.0", "2.0.0")
+		_ = IsVersionVulnerable("not-a-version", "1.0.0", "2.0.0", true, true)
 	}
 }
 
 func BenchmarkIsVersionVulnerable_EmptyInputs(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = IsVersionVulnerable("", "1.0.0", "2.0.0")
+		_ = IsVersionVulnerable("", "1.0.0", "2.0.0", true, true)
 	}
 }
 
@@ -88,7 +88,7 @@ func BenchmarkIsVersionVulnerable_ManyVersions(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, vr := range versions {
-			_ = IsVersionVulnerable("250.0.0", vr[0], vr[1])
+			_ = IsVersionVulnerable("250.0.0", vr[0], vr[1], true, true)
 		}
 	}
 }
@@ -113,7 +113,7 @@ func BenchmarkIsVersionVulnerable_RealisticWorkload(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, c := range checks {
-			_ = IsVersionVulnerable(c.ver, c.from, c.to)
+			_ = IsVersionVulnerable(c.ver, c.from, c.to, true, true)
 		}
 	}
 }

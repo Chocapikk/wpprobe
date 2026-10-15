@@ -234,7 +234,7 @@ func findMatchingVulnerabilities(
 
 	matched := make([]*wordfence.Vulnerability, 0, len(vulns))
 	for _, v := range vulns {
-		if versionpkg.IsVersionVulnerable(version, v.FromVersion, v.ToVersion) {
+		if versionpkg.IsVersionVulnerable(version, v.FromVersion, v.ToVersion, v.FromInclusive, v.ToInclusive) {
 			matched = append(matched, v)
 		}
 	}

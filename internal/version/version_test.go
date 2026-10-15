@@ -92,23 +92,37 @@ func Test_fetchVersionFromReadme(t *testing.T) {
 
 func TestIsVersionVulnerable(t *testing.T) {
 	tests := []struct {
-		name       string
-		version    string
-		from       string
-		to         string
-		wantResult bool
+		name          string
+		version       string
+		from          string
+		to            string
+		fromInclusive bool
+		toInclusive   bool
+		wantResult    bool
 	}{
-		{"Within range", "1.5.0", "1.0.0", "2.0.0", true},
-		{"Below range", "0.9.9", "1.0.0", "2.0.0", false},
-		{"Above range", "2.1.0", "1.0.0", "2.0.0", false},
-		{"Exact lower bound", "1.0.0", "1.0.0", "2.0.0", true},
-		{"Exact upper bound", "2.0.0", "1.0.0", "2.0.0", true},
-		{"Invalid version", "invalid", "1.0.0", "2.0.0", false},
+		{"Within range", "1.5.0", "1.0.0", "2.0.0", true, true, true},
+		{"Below range", "0.9.9", "1.0.0", "2.0.0", true, true, false},
+		{"Above range", "2.1.0", "1.0.0", "2.0.0", true, true, false},
+		{"Exact lower bound", "1.0.0", "1.0.0", "2.0.0", true, true, true},
+		{"Exact upper bound", "2.0.0", "1.0.0", "2.0.0", true, true, true},
+		{"Invalid version", "invalid", "1.0.0", "2.0.0", true, true, false},
+
+		{"Exact upper bound, exclusive", "2.0.0", "1.0.0", "2.0.0", true, false, false},
+		{"Below exclusive upper bound", "1.9.9", "1.0.0", "2.0.0", true, false, true},
+		{"Above exclusive upper bound", "2.0.1", "1.0.0", "2.0.0", true, false, false},
+
+		{"Exact lower bound, exclusive", "1.0.0", "1.0.0", "2.0.0", false, true, false},
+		{"Above exclusive lower bound", "1.0.1", "1.0.0", "2.0.0", false, true, true},
+		{"Below exclusive lower bound", "0.9.9", "1.0.0", "2.0.0", false, true, false},
+
+		{"Open interval, interior", "1.5.0", "1.0.0", "2.0.0", false, false, true},
+		{"Open interval, lower endpoint", "1.0.0", "1.0.0", "2.0.0", false, false, false},
+		{"Open interval, upper endpoint", "2.0.0", "1.0.0", "2.0.0", false, false, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := IsVersionVulnerable(tt.version, tt.from, tt.to)
+			got := IsVersionVulnerable(tt.version, tt.from, tt.to, tt.fromInclusive, tt.toInclusive)
 			if got != tt.wantResult {
 				t.Errorf("IsVersionVulnerable() = %v, want %v", got, tt.wantResult)
 			}
