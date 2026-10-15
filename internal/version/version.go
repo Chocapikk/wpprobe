@@ -122,6 +122,10 @@ func parseSemverCached(s string) (*semver.Version, bool) {
 	return parsed, true
 }
 
+// IsVersionVulnerable reports whether version falls within the affected range
+// bounded by fromVersion and toVersion. fromInclusive and toInclusive control
+// whether each bound is itself affected, so an exclusive upper bound leaves the
+// patched release out. Empty or unparseable versions are treated as not vulnerable.
 func IsVersionVulnerable(version, fromVersion, toVersion string, fromInclusive, toInclusive bool) bool {
 	if version == "" || fromVersion == "" || toVersion == "" {
 		return false
