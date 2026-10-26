@@ -60,7 +60,11 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, req.Threads)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	parentCtx := req.Context
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
@@ -80,6 +84,9 @@ func BruteforcePlugins(req BruteforceRequest) ([]string, map[string]string) {
 	calibrator := req.Calibrator
 	if calibrator == nil {
 		calibrator = NewCalibrator(ctx, sharedClient, normalized)
+	}
+	if calibrator.FabricatesContent() {
+		DisplayFabricatedContentWarning(req.Progress)
 	}
 
 	bruteCtx := BruteforceContext{
@@ -121,21 +128,8 @@ pluginLoop:
 
 	if ctx.Err() != nil {
 		logger.DefaultLogger.Info("Waiting for active goroutines to finish collecting results...")
-		done := make(chan struct{})
-		go func() {
-			wg.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			logger.DefaultLogger.Info("All goroutines finished, displaying results...")
-		case <-time.After(3 * time.Second):
-			logger.DefaultLogger.Warning("Some goroutines did not finish in time, displaying partial results...")
-		}
-	} else {
-		wg.Wait()
 	}
+	wg.Wait()
 
 	// All probes are in; now that we can see how many slugs matched only via a
 	// 403, decide whether they are real hardened plugins or WAF noise (issue #27).
@@ -149,6 +143,7 @@ func HybridScan(req HybridScanRequest) ([]string, map[string]string) {
 	bruteReq := BruteforceRequest{
 		Target:   req.Target,
 		Threads:  req.Threads,
+		Context:  req.Context,
 		Progress: req.Progress,
 		HTTP:     req.HTTP,
 	}

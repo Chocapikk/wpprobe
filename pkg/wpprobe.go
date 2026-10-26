@@ -182,10 +182,8 @@ func New() (*Scanner, error) {
 		logger.DefaultLogger.Verbose = oldVerbose
 	}()
 
-	// Just trigger loading of the global cache (if not already loaded)
-	// The actual data is stored globally and shared across all scanners
-	_, _ = vulnerability.LoadWordfenceVulnerabilities()
-	_, _ = vulnerability.LoadWPScanVulnerabilities()
+	// Trigger loading of the shared cache; WPScan is optional.
+	_ = vulnerability.GetAllVulnerabilities()
 
 	return &Scanner{}, nil
 }
@@ -264,10 +262,6 @@ func (s *Scanner) buildResult(target string, entries []file.PluginEntry) *ScanRe
 	seenCVEs := make(map[string]struct{})
 
 	for _, entry := range entries {
-		if entry.Version == "" || entry.Version == "unknown" {
-			continue
-		}
-
 		if entry.SoftwareType == "theme" {
 			if _, exists := themeMap[entry.Slug]; !exists {
 				themeMap[entry.Slug] = &ThemeResult{

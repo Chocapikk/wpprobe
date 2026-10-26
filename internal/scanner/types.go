@@ -130,6 +130,7 @@ type BruteforceRequest struct {
 	Target     string
 	Plugins    []string
 	Threads    int
+	Context    context.Context
 	Progress   Progress
 	HTTP       wphttp.Config
 	Calibrator *Calibrator
@@ -141,6 +142,7 @@ type HybridScanRequest struct {
 	StealthyPlugins   []string
 	BruteforcePlugins []string
 	Threads           int
+	Context           context.Context
 	Progress          Progress
 	HTTP              wphttp.Config
 }

@@ -20,6 +20,7 @@
 package http
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -203,14 +204,24 @@ func TestRateLimiter_Wait_Concurrent(t *testing.T) {
 		t.Errorf("No slow requests detected, but we made %d requests with RPS=%d", requests, rps)
 	}
 
-	// The rate limiter should work correctly - verify that it doesn't allow more than RPS
-	// The total time should reflect that we're limiting the rate
-	// For 20 requests at 10 RPS, we need at least 1 second for the extra 10 requests
-	// But since requests can be concurrent, we check that the limiter is actually working
-	if totalElapsed < 500*time.Millisecond && requests > rps {
-		// If all requests completed too quickly, the rate limiter might not be working
-		t.Logf("Total elapsed %v for %d requests at %d RPS - rate limiter appears to be working",
-			totalElapsed, requests, rps)
+	// Ten extra requests need ten refill intervals, even when they all wait
+	// concurrently. Leave scheduling tolerance without accepting a burst.
+	if totalElapsed < 800*time.Millisecond {
+		t.Errorf("20 requests at 10 RPS completed in %v; concurrent waiters bypassed the limit", totalElapsed)
+	}
+}
+
+func TestRateLimiter_WaitContext_Cancelled(t *testing.T) {
+	rl := NewRateLimiter(1)
+	rl.Wait() // Drain the initial token.
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if err := rl.WaitContext(ctx); err != context.DeadlineExceeded {
+		t.Fatalf("WaitContext returned %v, want context deadline exceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 250*time.Millisecond {
+		t.Fatalf("cancelled wait took %v", elapsed)
 	}
 }
 

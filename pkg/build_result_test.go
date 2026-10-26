@@ -63,7 +63,7 @@ func TestBuildResult_MixesVulnerableAndSafe(t *testing.T) {
 	}
 }
 
-func TestBuildResult_SkipsUnknownVersions(t *testing.T) {
+func TestBuildResult_IncludesUnknownVersions(t *testing.T) {
 	s := &Scanner{}
 	entries := []file.PluginEntry{
 		{Slug: "no-version", SoftwareType: "plugin", Version: ""},
@@ -73,11 +73,17 @@ func TestBuildResult_SkipsUnknownVersions(t *testing.T) {
 
 	result := s.buildResult("http://example.com", entries)
 
-	if len(result.Plugins) != 1 {
-		t.Fatalf("expected 1 plugin, got %d", len(result.Plugins))
+	if len(result.Plugins) != 3 {
+		t.Fatalf("expected 3 plugins, got %d", len(result.Plugins))
 	}
-	if result.Plugins[0].Name != "valid" {
-		t.Errorf("expected plugin name 'valid', got %q", result.Plugins[0].Name)
+	versions := make(map[string]string)
+	for _, plugin := range result.Plugins {
+		versions[plugin.Name] = plugin.Version
+	}
+	for name, want := range map[string]string{"no-version": "", "unknown-version": "unknown", "valid": "1.0.0"} {
+		if versions[name] != want {
+			t.Errorf("plugin %q has version %q, want %q", name, versions[name], want)
+		}
 	}
 }
 

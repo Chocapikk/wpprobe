@@ -211,15 +211,9 @@ func (h *HTTPClientManager) parseHeaders() (map[string]string, bool) {
 
 func (h *HTTPClientManager) waitForRate(ctx context.Context) error {
 	if h.rateLimiter == nil {
-		return nil
-	}
-	select {
-	case <-ctx.Done():
 		return ctx.Err()
-	default:
-		h.rateLimiter.Wait()
-		return nil
 	}
+	return h.rateLimiter.WaitContext(ctx)
 }
 
 func (h *HTTPClientManager) applyHeaders(req *http.Request) {

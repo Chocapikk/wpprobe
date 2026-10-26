@@ -37,7 +37,7 @@ func ScanTargets(opts ScanOptions) {
 		return
 	}
 
-	vulns, _ := vulnerability.LoadWordfenceVulnerabilities()
+	vulns := vulnerability.GetAllVulnerabilities()
 	config := buildScanConfig(opts, len(targets))
 	progress := createProgressManager(opts, len(targets))
 	writer := createWriter(opts)
@@ -121,11 +121,6 @@ func ScanSite(ctx ScanSiteContext) {
 	case <-scanCtx.Done():
 		return
 	default:
-	}
-
-	ctx.Opts.Calibrator = NewScanCalibrator(scanCtx, ctx.Target, ctx.Opts)
-	if ctx.Opts.Calibrator.FabricatesContent() {
-		DisplayFabricatedContentWarning(ctx.Progress)
 	}
 
 	execCtx := ScanExecutionContext{

@@ -20,6 +20,7 @@
 package http
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -27,7 +28,7 @@ import (
 // RateLimiter implements a token bucket rate limiter.
 type RateLimiter struct {
 	mu         sync.Mutex
-	tokens     int
+	tokens     float64
 	maxTokens  int
 	refillRate time.Duration
 	lastRefill time.Time
@@ -46,7 +47,7 @@ func NewRateLimiter(rps int) *RateLimiter {
 	}
 
 	return &RateLimiter{
-		tokens:     rps,
+		tokens:     float64(rps),
 		maxTokens:  rps,
 		refillRate: refillInterval,
 		lastRefill: time.Now(),
@@ -56,44 +57,41 @@ func NewRateLimiter(rps int) *RateLimiter {
 // Wait blocks until a token is available.
 // If the rate limiter is nil (disabled), returns immediately.
 func (rl *RateLimiter) Wait() {
-	if rl == nil {
-		return
-	}
-
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now()
-	elapsed := now.Sub(rl.lastRefill)
-
-	if elapsed > 0 {
-		tokensToAdd := int(elapsed / rl.refillRate)
-		if tokensToAdd > 0 {
-			rl.tokens = min(rl.tokens+tokensToAdd, rl.maxTokens)
-			rl.lastRefill = now
-		}
-	}
-
-	if rl.tokens > 0 {
-		rl.tokens--
-		return
-	}
-
-	waitTime := rl.refillRate - elapsed
-	if waitTime > 0 {
-		rl.mu.Unlock()
-		time.Sleep(waitTime)
-		rl.mu.Lock()
-		rl.tokens = rl.maxTokens - 1
-		rl.lastRefill = time.Now()
-	} else {
-		rl.tokens = 0
-	}
+	_ = rl.WaitContext(context.Background())
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// WaitContext waits for a token, or returns when ctx is cancelled.
+func (rl *RateLimiter) WaitContext(ctx context.Context) error {
+	if rl == nil {
+		return ctx.Err()
 	}
-	return b
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		rl.mu.Lock()
+		now := time.Now()
+		elapsed := now.Sub(rl.lastRefill)
+		if elapsed > 0 {
+			rl.tokens += float64(elapsed) / float64(rl.refillRate)
+			if rl.tokens > float64(rl.maxTokens) {
+				rl.tokens = float64(rl.maxTokens)
+			}
+			rl.lastRefill = now
+		}
+		if rl.tokens >= 1 {
+			rl.tokens--
+			rl.mu.Unlock()
+			return nil
+		}
+		waitTime := time.Duration((1 - rl.tokens) * float64(rl.refillRate))
+		rl.mu.Unlock()
+		timer := time.NewTimer(waitTime)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		}
+	}
 }
