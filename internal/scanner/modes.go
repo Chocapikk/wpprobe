@@ -145,22 +145,16 @@ func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 
 	stealthyResult := performStealthyScan(ctx)
 
-	if len(stealthyResult.Plugins) == 0 {
-		bruteResult := performBruteforceScan(ctx)
-		bruteResult.Themes = stealthyResult.Themes
-		return bruteResult
-	}
-
 	finishProgressIfNeeded(ctx.Progress)
 
-	remaining := calculateRemainingPlugins(stealthyResult.Plugins, ctx.Opts, ctx.Progress)
-	if len(remaining) == 0 {
-		return stealthyResult
+	candidates := loadHybridCandidates(stealthyResult.Plugins, ctx.Opts, ctx.Progress)
+	if len(candidates) == 0 {
+		return ScanDetectionResult{Themes: stealthyResult.Themes}
 	}
 
-	brutefound, versions := performBruteforceOnRemaining(ctx, remaining)
+	detected, versions := performBruteforceOnRemaining(ctx, candidates)
 
-	detected, result := combineHybridResults(stealthyResult.Plugins, stealthyResult.PluginResult, brutefound)
+	_, result := buildBruteforceResult(detected)
 	return ScanDetectionResult{
 		Plugins:      detected,
 		Themes:       stealthyResult.Themes,

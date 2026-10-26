@@ -89,7 +89,7 @@ func buildBruteforceResult(detected []string) ([]string, PluginDetectionResult) 
 	return detected, result
 }
 
-func calculateRemainingPlugins(stealthyList []string, opts ScanOptions, progress Progress) []string {
+func loadHybridCandidates(stealthyList []string, opts ScanOptions, progress Progress) []string {
 	allPlugins, err := LoadPluginsFromFile(opts.PluginList)
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to load plugin list: " + err.Error())
@@ -97,18 +97,22 @@ func calculateRemainingPlugins(stealthyList []string, opts ScanOptions, progress
 	}
 	logLoadedPlugins(progress, len(allPlugins))
 
-	seen := make(map[string]struct{}, len(stealthyList))
-	for _, p := range stealthyList {
-		seen[p] = struct{}{}
-	}
+	return mergeHybridCandidates(stealthyList, allPlugins)
+}
 
-	remaining := make([]string, 0, len(allPlugins))
-	for _, p := range allPlugins {
-		if _, exists := seen[p]; !exists {
-			remaining = append(remaining, p)
+func mergeHybridCandidates(stealthyList, allPlugins []string) []string {
+	// Route and HTML matches are candidates until a file probe confirms them.
+	candidates := make([]string, 0, len(stealthyList)+len(allPlugins))
+	seen := make(map[string]struct{}, cap(candidates))
+	for _, list := range [][]string{stealthyList, allPlugins} {
+		for _, p := range list {
+			if _, exists := seen[p]; !exists {
+				seen[p] = struct{}{}
+				candidates = append(candidates, p)
+			}
 		}
 	}
-	return remaining
+	return candidates
 }
 
 func logLoadedPlugins(progress Progress, pluginCount int) {
@@ -118,23 +122,6 @@ func logLoadedPlugins(progress Progress, pluginCount int) {
 		return
 	}
 	logger.DefaultLogger.Info(message)
-}
-
-func combineHybridResults(stealthyList []string, stealthyRes PluginDetectionResult, brutefound []string) ([]string, PluginDetectionResult) {
-	combined := make([]string, len(stealthyList), len(stealthyList)+len(brutefound))
-	copy(combined, stealthyList)
-	combined = append(combined, brutefound...)
-
-	result := stealthyRes
-	for _, p := range brutefound {
-		result.Plugins[p] = &PluginData{
-			Score:      1,
-			Confidence: 100.0,
-		}
-	}
-	result.Detected = combined
-
-	return combined, result
 }
 
 func writeResults(writer file.WriterInterface, target string, entries []file.PluginEntry) {

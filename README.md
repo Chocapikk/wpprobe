@@ -46,7 +46,7 @@ wpprobe scan -u https://example.com
 |------|--------|---------|----------|
 | `stealthy` (default) | REST API endpoint matching + HTML theme discovery | High | 5000+ plugins + themes |
 | `bruteforce` | Direct directory checks | Low | 10k+ plugins |
-| `hybrid` | Stealthy first, then brute-force | Medium | Maximum |
+| `hybrid` | REST/HTML candidates plus plugin list, verified by file checks | Medium | Maximum |
 
 ```sh
 wpprobe scan -u https://example.com --mode stealthy
@@ -165,7 +165,7 @@ export WPPROBE_NO_UPDATE_CHECK=1
 
 **Brute-force mode** checks plugin directories directly via GET requests. A 403 response confirms the plugin exists (directory listing forbidden). A 200 response is validated by checking for `readme.txt` in the directory listing to avoid false positives from WordPress instances that return 200 for all paths.
 
-**Hybrid mode** combines both: stealthy first for low-noise detection, then brute-force for remaining plugins. Themes are always discovered via HTML regardless of mode.
+**Hybrid mode** collects candidates from REST routes and HTML, adds the configured plugin list, then verifies every candidate with a direct plugin file check. REST routes alone can be shared by several plugins and do not confirm an installation. Themes are always discovered via HTML regardless of mode.
 
 Detected plugins and themes are correlated with known CVEs from Wordfence and WPScan databases, with version range matching to identify vulnerable installations.
 
@@ -223,7 +223,7 @@ The JSON output is always an array, with one object per scanned target, so a sin
 
 ## Limitations
 
-- **Stealthy**: Some plugins don't expose REST API endpoints. Disabled or hidden plugins may not be detected. Theme detection relies on HTML references, so themes loaded dynamically or via child themes may be missed.
+- **Stealthy**: REST route matches are candidates and can include false positives when plugins share routes. Some plugins don't expose REST API endpoints. Disabled or hidden plugins may not be detected. Theme detection relies on HTML references, so themes loaded dynamically or via child themes may be missed.
 - **Brute-force**: Generates many requests, may trigger WAFs or rate limits. Limited by wordlist coverage. Does not brute-force themes.
 - **Hybrid**: Slower than pure stealthy due to the brute-force phase.
 

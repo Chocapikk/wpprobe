@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -107,6 +111,57 @@ func TestPerformHybridScan_PreservesThemesWithPlugins(t *testing.T) {
 	}
 	if !foundTheme {
 		t.Errorf("expected theme %q in results, got: %v", themeName, result.Themes)
+	}
+}
+
+func TestPerformHybridScan_RejectsRouteOnlyPlugin(t *testing.T) {
+	var routeOnlyProbes atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/wp-content/plugins/op-kassa-for-woocommerce/") {
+			routeOnlyProbes.Add(1)
+		}
+		switch {
+		case r.URL.Path == "/":
+			_, _ = fmt.Fprint(w, `<script src="/wp-content/plugins/woocommerce/assets/app.js"></script>`)
+		case r.URL.Path == "/wp-json" || r.URL.Query().Has("rest_route"):
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"routes":{"/wc/v3":{}}}`)
+		case r.URL.Path == "/wp-content/plugins/woocommerce/woocommerce.php":
+			_, _ = fmt.Fprint(w, "")
+		case r.URL.Path == "/wp-content/plugins/woocommerce/readme.txt":
+			_, _ = fmt.Fprint(w, "Stable tag: 11.2.1")
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	list := filepath.Join(t.TempDir(), "plugins.txt")
+	if err := os.WriteFile(list, []byte("woocommerce\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := ScanExecutionContext{
+		Target: srv.URL,
+		Opts: ScanOptions{
+			Threads:    4,
+			ScanMode:   "hybrid",
+			PluginList: list,
+			File:       "api",
+		},
+		Ctx: context.Background(),
+	}
+
+	result := performHybridScan(ctx)
+	if len(result.Plugins) != 1 || result.Plugins[0] != "woocommerce" {
+		t.Fatalf("hybrid plugins = %v, want only woocommerce", result.Plugins)
+	}
+	if _, exists := result.PluginResult.Plugins["op-kassa-for-woocommerce"]; exists {
+		t.Fatal("route-only candidate survived direct verification")
+	}
+	if routeOnlyProbes.Load() == 0 {
+		t.Fatal("route-only candidate was skipped instead of verified")
 	}
 }
 

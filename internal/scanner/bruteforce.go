@@ -138,39 +138,18 @@ pluginLoop:
 	return detected, versions
 }
 
-// HybridScan performs a hybrid scan: first stealthy, then brute-forces remaining plugins.
+// HybridScan verifies route and HTML candidates before reporting them.
 func HybridScan(req HybridScanRequest) ([]string, map[string]string) {
 	bruteReq := BruteforceRequest{
 		Target:   req.Target,
+		Plugins:  mergeHybridCandidates(req.StealthyPlugins, req.BruteforcePlugins),
 		Threads:  req.Threads,
 		Context:  req.Context,
 		Progress: req.Progress,
 		HTTP:     req.HTTP,
 	}
 
-	if len(req.StealthyPlugins) == 0 {
-		bruteReq.Plugins = req.BruteforcePlugins
-		detected, versions := BruteforcePlugins(bruteReq)
-		return detected, versions
-	}
-
-	detectedMap := make(map[string]struct{}, len(req.StealthyPlugins))
-	for _, p := range req.StealthyPlugins {
-		detectedMap[p] = struct{}{}
-	}
-
-	remaining := make([]string, 0, len(req.BruteforcePlugins))
-	for _, p := range req.BruteforcePlugins {
-		if _, exists := detectedMap[p]; !exists {
-			remaining = append(remaining, p)
-		}
-	}
-
-	bruteReq.Plugins = remaining
-	brutefound, versions := BruteforcePlugins(bruteReq)
-	result := make([]string, len(req.StealthyPlugins), len(req.StealthyPlugins)+len(brutefound))
-	copy(result, req.StealthyPlugins)
-	return append(result, brutefound...), versions
+	return BruteforcePlugins(bruteReq)
 }
 
 func scanPlugin(plugin string, ctx BruteforceContext) {
