@@ -20,20 +20,21 @@
 package scanner
 
 import (
+	"fmt"
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 )
 
-func loadTargets(opts ScanOptions) []string {
+func loadTargets(opts ScanOptions) ([]string, error) {
 	if opts.File != "" {
 		lines, err := file.ReadLines(opts.File)
 		if err != nil {
 			logger.DefaultLogger.Error("Failed to read file: " + err.Error())
-			return nil
+			return nil, fmt.Errorf("read targets from %s: %w", opts.File, err)
 		}
-		return lines
+		return lines, nil
 	}
-	return []string{opts.URL}
+	return []string{opts.URL}, nil
 }
 
 func buildScanConfig(opts ScanOptions, targetCount int) scanConfig {
@@ -105,4 +106,11 @@ func closeWriter(writer file.WriterInterface) {
 	if writer != nil {
 		writer.Close()
 	}
+}
+
+func writerError(writer file.WriterInterface) error {
+	if checked, ok := writer.(interface{ Err() error }); ok {
+		return checked.Err()
+	}
+	return nil
 }

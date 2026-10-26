@@ -119,8 +119,7 @@ var scanCmd = &cobra.Command{
 			return fmt.Errorf("you must provide either --url or --file")
 		}
 
-		scanner.ScanTargets(opts)
-		return nil
+		return scanner.ScanTargets(opts)
 	},
 }
 

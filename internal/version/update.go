@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/Chocapikk/wpprobe/internal/logger"
@@ -35,6 +36,8 @@ const githubRepo = "Chocapikk/wpprobe"
 var Version = "dev"
 
 var exitFunc = os.Exit
+
+var executablePath = os.Executable
 
 var GitHubLatestReleaseURL = func() string {
 	return fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
@@ -127,40 +130,61 @@ func AutoUpdate(currentVersion string) error {
 		return err
 	}
 
-	currentExe, err := os.Executable()
+	currentExe, err := executablePath()
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to determine executable path: " + err.Error())
 		return err
 	}
 
 	logger.DefaultLogger.Info("Replacing current binary: " + currentExe)
-	tmpFile := currentExe + ".tmp"
-
-	if err := os.WriteFile(tmpFile, body, 0o755); err != nil {
-		logger.DefaultLogger.Error("Failed to write temp file: " + err.Error())
-		return err
-	}
-
-	if runtime.GOOS == "windows" {
-		oldFile := currentExe + ".old"
-		_ = os.Remove(oldFile)
-		if err := os.Rename(currentExe, oldFile); err != nil {
-			logger.DefaultLogger.Error("Failed to rename current binary: " + err.Error())
-			return err
-		}
-	} else {
-		if err := os.Remove(currentExe); err != nil {
-			logger.DefaultLogger.Warning("Failed removing current file: " + err.Error())
-		}
-	}
-
-	if err := os.Rename(tmpFile, currentExe); err != nil {
+	if err := replaceBinary(currentExe, body); err != nil {
 		logger.DefaultLogger.Error("Failed to replace old binary: " + err.Error())
 		return err
 	}
 
 	logger.DefaultLogger.Success("Update successful! Restart WPProbe to use the new version.")
 	exitFunc(0)
+	return nil
+}
+
+func replaceBinary(currentExe string, body []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(currentExe), ".wpprobe-update-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o755); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(body); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	if runtime.GOOS != "windows" {
+		return os.Rename(tmpPath, currentExe)
+	}
+
+	oldFile := currentExe + ".old"
+	_ = os.Remove(oldFile)
+	if err := os.Rename(currentExe, oldFile); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, currentExe); err != nil {
+		if rollbackErr := os.Rename(oldFile, currentExe); rollbackErr != nil {
+			return fmt.Errorf("replace binary: %w; restore previous binary: %v", err, rollbackErr)
+		}
+		return err
+	}
 	return nil
 }
 

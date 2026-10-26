@@ -136,13 +136,10 @@ func updateFromGitHub() error {
 		return err
 	}
 
-	out, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer func() { _ = out.Close() }()
-
-	if _, err := io.Copy(out, resp.Body); err != nil {
+	if err := file.WriteAtomic(outputPath, func(w io.Writer) error {
+		_, err := io.Copy(w, resp.Body)
+		return err
+	}); err != nil {
 		return fmt.Errorf("failed to write database: %w", err)
 	}
 
@@ -231,7 +228,11 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 
 		authType = vulnerability.DetermineAuthType(cvssVector, title)
 
-		for _, software := range vulnMap["software"].([]interface{}) {
+		softwareList, ok := vulnMap["software"].([]interface{})
+		if !ok {
+			continue
+		}
+		for _, software := range softwareList {
 			softMap, ok := software.(map[string]interface{})
 			if !ok {
 				continue
@@ -257,13 +258,20 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 					continue
 				}
 
+				fromRaw, fromOK := affectedVersion["from_version"].(string)
+				toRaw, toOK := affectedVersion["to_version"].(string)
+				fromInclusive, fromInclusiveOK := affectedVersion["from_inclusive"].(bool)
+				toInclusive, toInclusiveOK := affectedVersion["to_inclusive"].(bool)
+				if !fromOK || !toOK || !fromInclusiveOK || !toInclusiveOK {
+					continue
+				}
 				fromVersion := strings.ReplaceAll(
-					affectedVersion["from_version"].(string),
+					fromRaw,
 					"*",
 					"0.0.0",
 				)
 				toVersion := strings.ReplaceAll(
-					affectedVersion["to_version"].(string),
+					toRaw,
 					"*",
 					"999999.0.0",
 				)
@@ -274,9 +282,9 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 					SoftwareType:    softwareType,
 					AffectedVersion: versionLabel,
 					FromVersion:     fromVersion,
-					FromInclusive:   affectedVersion["from_inclusive"].(bool),
+					FromInclusive:   fromInclusive,
 					ToVersion:       toVersion,
-					ToInclusive:     affectedVersion["to_inclusive"].(bool),
+					ToInclusive:     toInclusive,
 					Severity:        cvssRating,
 					CVE:             cve,
 					CVELink:         cveLink,

@@ -153,24 +153,28 @@ func TestAutoUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("failed to close temp file: %v", err)
+	}
 	defer func() {
-		if err := tmpFile.Close(); err != nil {
-			t.Errorf("failed to close temp file: %v", err)
-		}
 		if err := os.Remove(tmpFile.Name()); err != nil {
 			t.Errorf("failed to remove temp file: %v", err)
 		}
 	}()
 
-	originalArg0 := os.Args[0]
-	os.Args[0] = tmpFile.Name()
-	defer func() { os.Args[0] = originalArg0 }()
+	originalExecutablePath := executablePath
+	executablePath = func() (string, error) { return tmpFile.Name(), nil }
+	defer func() { executablePath = originalExecutablePath }()
 
 	if err := AutoUpdate(Version); err != nil {
 		t.Errorf("AutoUpdate() error = %v, want nil", err)
 	}
 	if !exitCalled {
 		t.Error("expected exitFunc to be called, but it wasn't")
+	}
+	data, err := os.ReadFile(tmpFile.Name())
+	if err != nil || string(data) != "binary data" {
+		t.Errorf("updated binary = %q, error = %v", data, err)
 	}
 }
 

@@ -96,6 +96,29 @@ func Test_processWordfenceData(t *testing.T) {
 	}
 }
 
+func TestProcessWordfenceDataSkipsMalformedRanges(t *testing.T) {
+	data := map[string]interface{}{
+		"missing software": map[string]interface{}{"cve": "CVE-2024-0001"},
+		"bad range": map[string]interface{}{
+			"cve": "CVE-2024-0002",
+			"software": []interface{}{map[string]interface{}{
+				"slug": "test-plugin", "type": "plugin",
+				"affected_versions": map[string]interface{}{
+					"bad": map[string]interface{}{"from_version": "1.0", "to_version": 2},
+					"good": map[string]interface{}{
+						"from_version": "1.0", "to_version": "2.0",
+						"from_inclusive": true, "to_inclusive": false,
+					},
+				},
+			}},
+		},
+	}
+	got := processWordfenceData(data)
+	if len(got) != 1 || got[0].AffectedVersion != "good" {
+		t.Fatalf("processed vulnerabilities = %+v, want only the valid range", got)
+	}
+}
+
 func Test_saveVulnerabilitiesToFile(t *testing.T) {
 	vulnerabilities := []Vulnerability{
 		{

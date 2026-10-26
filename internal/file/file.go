@@ -163,12 +163,14 @@ type CSVWriter struct {
 	file   *os.File
 	writer *csv.Writer
 	mu     sync.Mutex
+	err    error
 }
 
 func NewCSVWriter(filename string) *CSVWriter {
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to open CSV file: " + err.Error())
+		return &CSVWriter{err: err}
 	}
 	writer := csv.NewWriter(file)
 	header := []string{
@@ -184,14 +186,20 @@ func NewCSVWriter(filename string) *CSVWriter {
 		"CVSS Vector",
 		"Title",
 	}
-	_ = writer.Write(header)
+	if err := writer.Write(header); err != nil {
+		_ = file.Close()
+		return &CSVWriter{err: err}
+	}
 	writer.Flush()
-	return &CSVWriter{file: file, writer: writer}
+	return &CSVWriter{file: file, writer: writer, err: writer.Error()}
 }
 
 func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.err != nil {
+		return
+	}
 
 	sortResultsBySeverity(results)
 
@@ -213,16 +221,34 @@ func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 			entry.CVSSVector,
 			entry.Title,
 		}
-		_ = c.writer.Write(row)
+		if err := c.writer.Write(row); err != nil {
+			c.err = err
+			return
+		}
 	}
 	c.writer.Flush()
+	c.err = c.writer.Error()
 }
 
 func (c *CSVWriter) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.file == nil {
+		return
+	}
 	c.writer.Flush()
-	_ = c.file.Close()
+	if c.err == nil {
+		c.err = c.writer.Error()
+	}
+	if err := c.file.Close(); c.err == nil {
+		c.err = err
+	}
+}
+
+func (c *CSVWriter) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.err
 }
 
 //////////////////////////////
@@ -233,17 +259,19 @@ type JSONWriter struct {
 	file  *os.File
 	mu    sync.Mutex
 	first bool
+	err   error
 }
 
 func NewJSONWriter(output string) *JSONWriter {
 	file, err := os.OpenFile(output, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		logger.DefaultLogger.Error("Failed to open JSON file: " + err.Error())
-		os.Exit(1)
+		return &JSONWriter{err: err}
 	}
 	if _, err := file.WriteString("["); err != nil {
 		logger.DefaultLogger.Error("Failed to write JSON file: " + err.Error())
-		os.Exit(1)
+		_ = file.Close()
+		return &JSONWriter{err: err}
 	}
 	return &JSONWriter{file: file, first: true}
 }
@@ -251,6 +279,9 @@ func NewJSONWriter(output string) *JSONWriter {
 func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.err != nil {
+		return
+	}
 
 	pluginResultsMap := make(map[string]*PluginResult)
 	themeResultsMap := make(map[string]*PluginResult)
@@ -320,23 +351,45 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
-	_ = encoder.Encode(outputEntry)
+	if err := encoder.Encode(outputEntry); err != nil {
+		j.err = err
+		return
+	}
 
 	data := buffer.Bytes()
 	data = bytes.TrimRight(data, "\n")
 
 	if !j.first {
-		_, _ = j.file.WriteString(",")
+		if _, err := j.file.WriteString(","); err != nil {
+			j.err = err
+			return
+		}
+	}
+	if _, err := j.file.Write(data); err != nil {
+		j.err = err
+		return
 	}
 	j.first = false
-	_, _ = j.file.Write(data)
 }
 
 func (j *JSONWriter) Close() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	_, _ = j.file.WriteString("]")
-	_ = j.file.Close()
+	if j.file == nil {
+		return
+	}
+	if j.err == nil {
+		_, j.err = j.file.WriteString("]")
+	}
+	if err := j.file.Close(); j.err == nil {
+		j.err = err
+	}
+}
+
+func (j *JSONWriter) Err() error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.err
 }
 
 //////////////////////////////

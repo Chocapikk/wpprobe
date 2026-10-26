@@ -45,6 +45,20 @@ func (mw *MockWriter) Output() string {
 	return mw.buffer.String()
 }
 
+func TestScanTargetsReportsMissingTargetFile(t *testing.T) {
+	err := ScanTargets(ScanOptions{File: t.TempDir() + "/missing.txt"})
+	if err == nil {
+		t.Fatal("expected an error for an unreadable target file")
+	}
+}
+
+func TestScanTargetsReportsUnwritableOutput(t *testing.T) {
+	err := ScanTargets(ScanOptions{URL: "http://example.invalid", Output: t.TempDir()})
+	if err == nil {
+		t.Fatal("expected an error for an unwritable output path")
+	}
+}
+
 func TestScanSite(t *testing.T) {
 	mockWriter := &MockWriter{}
 

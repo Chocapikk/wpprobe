@@ -28,25 +28,31 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/vulnerability"
 )
 
-func ScanTargets(opts ScanOptions) {
+func ScanTargets(opts ScanOptions) error {
 	// Configure logger verbosity
 	logger.DefaultLogger.SetVerbose(opts.Verbose)
 
-	targets := loadTargets(opts)
+	targets, err := loadTargets(opts)
+	if err != nil {
+		return err
+	}
 	if len(targets) == 0 {
-		return
+		return nil
 	}
 
 	vulns := vulnerability.GetAllVulnerabilities()
 	config := buildScanConfig(opts, len(targets))
 	progress := createProgressManager(opts, len(targets))
 	writer := createWriter(opts)
+	if err := writerError(writer); err != nil {
+		closeWriter(writer)
+		return err
+	}
 
 	// Create a single global rate limiter shared across all targets
 	if opts.SharedLimiter == nil && opts.RateLimit > 0 {
 		opts.SharedLimiter = wphttp.NewRateLimiter(opts.RateLimit)
 	}
-	defer closeWriter(writer)
 
 	execConfig := ScanExecutionConfig{
 		Targets:  targets,
@@ -57,6 +63,8 @@ func ScanTargets(opts ScanOptions) {
 		Writer:   writer,
 	}
 	executeScans(execConfig)
+	closeWriter(writer)
+	return writerError(writer)
 }
 
 func executeScans(config ScanExecutionConfig) {
