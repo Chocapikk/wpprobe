@@ -198,7 +198,10 @@ func (h *HTTPClientManager) parseHeaders() (map[string]string, bool) {
 		if len(parts) != 2 {
 			continue
 		}
-		key := strings.TrimSpace(parts[0])
+		key := http.CanonicalHeaderKey(strings.TrimSpace(parts[0]))
+		if key == "" {
+			continue
+		}
 		value := strings.TrimSpace(parts[1])
 		if strings.EqualFold(key, "User-Agent") {
 			hasUA = true

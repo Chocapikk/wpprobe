@@ -24,6 +24,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -46,21 +47,27 @@ func colorize(color, text string) string {
 
 type Logger struct {
 	Logger  *log.Logger
-	Verbose bool
+	verbose atomic.Bool
 }
 
 func NewLogger() *Logger {
-	return &Logger{
-		Logger:  log.New(os.Stdout, "", 0),
-		Verbose: true, // Default to verbose for CLI
-	}
+	return NewLoggerWithVerbose(true)
 }
 
 func NewLoggerWithVerbose(verbose bool) *Logger {
-	return &Logger{
-		Logger:  log.New(os.Stdout, "", 0),
-		Verbose: verbose,
-	}
+	l := &Logger{Logger: log.New(os.Stdout, "", 0)}
+	l.verbose.Store(verbose)
+	return l
+}
+
+// SetVerbose changes the logger's verbosity safely across goroutines.
+func (l *Logger) SetVerbose(verbose bool) {
+	l.verbose.Store(verbose)
+}
+
+// IsVerbose reports the current verbosity.
+func (l *Logger) IsVerbose() bool {
+	return l.verbose.Load()
 }
 
 func formatTime() string {
@@ -68,14 +75,14 @@ func formatTime() string {
 }
 
 func (l *Logger) Info(msg string) {
-	if !l.Verbose {
+	if !l.IsVerbose() {
 		return
 	}
 	l.Logger.Println(formatTime() + " [" + colorize(ansiInfo, "INFO") + "] " + msg)
 }
 
 func (l *Logger) Warning(msg string) {
-	if !l.Verbose {
+	if !l.IsVerbose() {
 		return
 	}
 	l.Logger.Println(formatTime() + " [" + colorize(ansiWarning, "WARNING") + "] " + msg)
@@ -87,7 +94,7 @@ func (l *Logger) Error(msg string) {
 }
 
 func (l *Logger) Success(msg string) {
-	if !l.Verbose {
+	if !l.IsVerbose() {
 		return
 	}
 	l.Logger.Println(FormatSuccess(msg))

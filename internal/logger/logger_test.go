@@ -21,9 +21,11 @@ package logger
 
 import (
 	"bytes"
+	"io"
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -32,6 +34,26 @@ func TestNewLogger(t *testing.T) {
 	if logger == nil {
 		t.Errorf("NewLogger() returned nil")
 	}
+}
+
+func TestConcurrentVerbosity(t *testing.T) {
+	l := NewLoggerWithVerbose(false)
+	l.Logger = log.New(io.Discard, "", 0)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			l.SetVerbose(i%2 == 0)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			l.Info("concurrent")
+		}
+	}()
+	wg.Wait()
 }
 
 func Test_formatTime(t *testing.T) {

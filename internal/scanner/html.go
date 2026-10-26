@@ -108,7 +108,6 @@ func discoverPluginsFromHTML(ctx context.Context, target string, cfg http.Config
 var (
 	wpContentMarker = []byte("wp-content/")
 	pluginsPrefix   = []byte("wp-content/plugins/")
-	uploadsPrefix   = []byte("wp-content/uploads/")
 	themesPrefix    = []byte("wp-content/themes/")
 )
 
@@ -136,7 +135,7 @@ func extractSlugFromPath(val, prefix []byte, dest map[string]struct{}) {
 	}
 }
 
-// extractSlugsFrom scans one attribute value or text run for all three
+// extractSlugsFrom scans one attribute value or text run for plugin and theme
 // locations. The single marker check up front is what makes it cheap: most of a
 // page mentions wp-content nowhere, and rejecting it once beats three separate
 // searches.
@@ -145,7 +144,6 @@ func extractSlugsFrom(val []byte, pluginDest, themeDest map[string]struct{}) {
 		return
 	}
 	extractSlugFromPath(val, pluginsPrefix, pluginDest)
-	extractSlugFromPath(val, uploadsPrefix, pluginDest)
 	extractSlugFromPath(val, themesPrefix, themeDest)
 }
 

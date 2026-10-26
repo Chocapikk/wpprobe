@@ -117,7 +117,7 @@ func mergeHybridCandidates(stealthyList, allPlugins []string) []string {
 
 func logLoadedPlugins(progress Progress, pluginCount int) {
 	message := fmt.Sprintf("Loaded %d plugins for brute-force scanning", pluginCount)
-	if logger.DefaultLogger.Verbose && progress != nil {
+	if logger.DefaultLogger.IsVerbose() && progress != nil {
 		_, _ = progress.Bprintln(logger.FormatInfo(message))
 		return
 	}

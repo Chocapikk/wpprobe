@@ -252,7 +252,7 @@ func probePluginFiles(ctx BruteforceContext, plugin string, files []string) (boo
 
 func recordPluginFound(plugin, ver string, ctx BruteforceContext) {
 	msg := "Found plugin " + plugin + " version " + ver
-	if logger.DefaultLogger.Verbose {
+	if logger.DefaultLogger.IsVerbose() {
 		if ctx.Progress != nil {
 			_, _ = ctx.Progress.Bprintln(logger.FormatSuccess(msg))
 		} else {

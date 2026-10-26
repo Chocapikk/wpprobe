@@ -58,6 +58,11 @@ func TestExtractSlugsFromReader(t *testing.T) {
 			wantSlugs: []string{},
 		},
 		{
+			name:      "Uploaded files are not plugins",
+			html:      `<img src="/wp-content/uploads/media-library/photo.jpg">`,
+			wantSlugs: []string{},
+		},
+		{
 			name: "Malformed attributes",
 			html: `<html><body>
 				<a href="wp-content/plugins//style.css"></a>

@@ -86,7 +86,8 @@ type PluginResult struct {
 	// Detected version
 	Version string
 
-	// Confidence score (0-100)
+	// REST route coverage (0-100) for passive matches; direct checks report 100.
+	// This is not a probability that the plugin is installed.
 	Confidence float64
 
 	// Whether the detection is ambiguous
@@ -173,15 +174,7 @@ type Scanner struct{}
 // New creates a new Scanner instance.
 // The scanner uses a global vulnerability cache that is loaded once and shared
 // across all Scanner instances. This prevents memory bloat when creating many scanners.
-// Logging is disabled during vulnerability loading when called from the API.
 func New() (*Scanner, error) {
-	// Disable verbose logging during vulnerability loading
-	oldVerbose := logger.DefaultLogger.Verbose
-	logger.DefaultLogger.Verbose = false
-	defer func() {
-		logger.DefaultLogger.Verbose = oldVerbose
-	}()
-
 	// Trigger loading of the shared cache; WPScan is optional.
 	_ = vulnerability.GetAllVulnerabilities()
 
@@ -193,6 +186,9 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 	if cfg.Context == nil {
 		cfg.Context = context.Background()
 	}
+	if err := cfg.Context.Err(); err != nil {
+		return nil, err
+	}
 
 	if cfg.ScanMode == "" {
 		cfg.ScanMode = "stealthy"
@@ -202,10 +198,6 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		cfg.Threads = 10
 	}
 
-	maxRedirects := cfg.MaxRedirects
-	if maxRedirects == 0 {
-		maxRedirects = -1 // Use default if not set
-	}
 	opts := scanner.ScanOptions{
 		URL:            cfg.Target,
 		ScanMode:       cfg.ScanMode,
@@ -215,7 +207,7 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		Proxy:          cfg.Proxy,
 		PluginList:     cfg.PluginList,
 		NoCheckVersion: cfg.NoCheckVersion,
-		MaxRedirects:   maxRedirects,
+		MaxRedirects:   cfg.MaxRedirects,
 		File:           "api",          // Set File to disable progress bar display
 		Verbose:        cfg.Verbose,    // Use Verbose from config (default: false)
 		Context:        cfg.Context,    // Propagate context for cancellation
@@ -223,7 +215,7 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 	}
 
 	// Configure logger verbosity for API usage
-	logger.DefaultLogger.Verbose = cfg.Verbose
+	logger.DefaultLogger.SetVerbose(cfg.Verbose)
 
 	writer := file.NewMemoryWriter()
 	defer writer.Close()
@@ -239,11 +231,20 @@ func (s *Scanner) Scan(cfg Config) (*ScanResult, error) {
 		Vulns:    vulns,
 	}
 
-	scanner.ScanSite(scanCtx)
+	detection := scanner.ScanSite(scanCtx)
+	if err := cfg.Context.Err(); err != nil {
+		return nil, err
+	}
 
 	entries := writer.GetResults()
-
-	return s.buildResult(cfg.Target, entries), nil
+	result := s.buildResult(cfg.Target, entries)
+	for i := range result.Plugins {
+		if data := detection.Plugins[result.Plugins[i].Name]; data != nil {
+			result.Plugins[i].Confidence = data.Confidence
+			result.Plugins[i].Ambiguous = data.Ambiguous
+		}
+	}
+	return result, nil
 }
 
 // buildResult converts internal file entries to public API results.
@@ -354,15 +355,7 @@ func appendVuln(vulns *VulnerabilitiesBySeverity, vuln Vulnerability, summary *V
 // WPScan update requires WPSCAN_API_TOKEN environment variable to be set.
 // Returns an error only if Wordfence update fails. WPScan update failures are ignored
 // (WPScan is optional and requires Enterprise plan).
-// Logging is disabled during database updates when called from the API.
 func UpdateDatabases() error {
-	// Disable verbose logging during database updates
-	oldVerbose := logger.DefaultLogger.Verbose
-	logger.DefaultLogger.Verbose = false
-	defer func() {
-		logger.DefaultLogger.Verbose = oldVerbose
-	}()
-
 	if err := wordfence.UpdateWordfence(); err != nil {
 		return err
 	}

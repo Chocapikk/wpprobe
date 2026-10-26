@@ -137,7 +137,7 @@ func performBruteforceScan(ctx ScanExecutionContext) ScanDetectionResult {
 
 func performHybridScan(ctx ScanExecutionContext) ScanDetectionResult {
 	message := "Starting hybrid scan: first stealthy, then brute-force..."
-	if logger.DefaultLogger.Verbose && ctx.Progress != nil {
+	if logger.DefaultLogger.IsVerbose() && ctx.Progress != nil {
 		_, _ = ctx.Progress.Bprintln(logger.FormatInfo(message))
 	} else {
 		logger.DefaultLogger.Info(message)

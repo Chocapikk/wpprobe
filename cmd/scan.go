@@ -61,7 +61,7 @@ var scanCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Configure logger verbosity first
 		verbose := mustBool(cmd.Flags().GetBool("verbose"))
-		logger.DefaultLogger.Verbose = verbose
+		logger.DefaultLogger.SetVerbose(verbose)
 
 		outputFile := cmd.Flag("output").Value.String()
 		outputFormat := file.DetectOutputFormat(outputFile)

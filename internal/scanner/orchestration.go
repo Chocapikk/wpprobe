@@ -30,7 +30,7 @@ import (
 
 func ScanTargets(opts ScanOptions) {
 	// Configure logger verbosity
-	logger.DefaultLogger.Verbose = opts.Verbose
+	logger.DefaultLogger.SetVerbose(opts.Verbose)
 
 	targets := loadTargets(opts)
 	if len(targets) == 0 {
@@ -106,7 +106,7 @@ func scanTarget(ctx TargetScanContext) {
 	}
 }
 
-func ScanSite(ctx ScanSiteContext) {
+func ScanSite(ctx ScanSiteContext) PluginDetectionResult {
 	scanMode := getScanMode(ctx.Opts.ScanMode)
 	clearProgressLine(ctx.Progress, isFileScan(ctx.Opts))
 
@@ -119,7 +119,7 @@ func ScanSite(ctx ScanSiteContext) {
 	// Check context before starting
 	select {
 	case <-scanCtx.Done():
-		return
+		return PluginDetectionResult{}
 	default:
 	}
 
@@ -134,12 +134,12 @@ func ScanSite(ctx ScanSiteContext) {
 
 	if len(scanResult.Plugins) == 0 && len(scanResult.Themes) == 0 {
 		handleNoPluginsDetected(ctx)
-		return
+		return scanResult.PluginResult
 	}
 
 	select {
 	case <-scanCtx.Done():
-		return
+		return scanResult.PluginResult
 	default:
 	}
 
@@ -170,4 +170,5 @@ func ScanSite(ctx ScanSiteContext) {
 		}
 		ctx.Opts.DisplayFunc(displayCtx)
 	}
+	return scanResult.PluginResult
 }

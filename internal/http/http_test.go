@@ -98,6 +98,22 @@ func TestHTTPClientManager_Get(t *testing.T) {
 	}
 }
 
+func TestLowercaseUserAgentHeader(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.Header.Get("User-Agent")))
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(time.Second, []string{"user-agent: expected-agent"}, "", 0, -1)
+	got, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "expected-agent" {
+		t.Fatalf("User-Agent = %q, want expected-agent", got)
+	}
+}
+
 func TestTransport_KeepAlivesEnabled(t *testing.T) {
 	client := NewHTTPClient(5*time.Second, nil, "", 0, -1)
 	transport, ok := client.client.Transport.(*http.Transport)
