@@ -21,6 +21,7 @@ package scanner
 
 import (
 	"fmt"
+
 	"github.com/Chocapikk/wpprobe/internal/file"
 	"github.com/Chocapikk/wpprobe/internal/logger"
 )
